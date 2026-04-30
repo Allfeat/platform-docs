@@ -1,0 +1,19 @@
+---
+title: External User References
+description: Use external_user_ref to correlate Allfeat webhook callbacks back to your own user records — opaque, echoed unchanged, never on chain.
+---
+
+You can pass an arbitrary opaque string (≤ 255 bytes) on `init` / `init-upload` to link the registration to your own user record:
+
+```jsonc
+{ ..., "external_user_ref": "user-42" }
+```
+
+It is:
+
+- **Echoed back** unchanged in webhook payloads (`external_user_ref` field).
+- **Stored** in the transaction record so support can correlate by it.
+- **Opaque to us** — no validation beyond the length cap. We never display it in dashboards or treat it as PII; pick something that makes sense to your system (e.g. your internal user ID, an order ID, etc.).
+- **Not propagated on chain** — it lives only in the platform DB.
+
+If you need to look up by it later, **persist the `transaction_id` → `external_user_ref` mapping yourself** when you see the confirm response; there is no inverse-lookup endpoint by design.

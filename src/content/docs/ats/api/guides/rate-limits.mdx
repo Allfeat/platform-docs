@@ -1,0 +1,10 @@
+---
+title: Rate Limits & Quotas
+description: API key caps, idempotency cache TTL, confirm concurrency, freemium testnet quota, and per-network credit balance enforcement.
+---
+
+- **API key cap:** up to `api_keys.max_keys_per_org` keys per organization (default 10). Past that, `429 api_key.limit_reached`.
+- **Idempotency cache:** 24 hours per `(api_key_id, idempotency_key)` pair.
+- **Confirm concurrency:** confirm endpoints are concurrency-limited at 10 per service instance — bursts above that briefly queue or shed (`503` with retry).
+- **Freemium testnet quota:** small organizations on testnet may have a per-period limit on registrations to prevent abuse. The cap is enforced at `confirm` time and surfaces as `429 common.quota_exceeded` with `details.resets_at`. Mainnet has no freemium quota — every transaction is paid in credits.
+- **Per-network credit balance:** every confirm pre-debits the price quoted at prepare. If the org's balance is insufficient, confirm fails with `403 common.forbidden`. Top up via the **Billing** dashboard.

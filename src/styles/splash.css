@@ -1,0 +1,26 @@
+/* ============================================================
+   Splash template overrides — full-bleed pages without
+   Starlight's content padding, max-width, or stub <h1>.
+   Used by the landing page and the 404 page.
+   ============================================================ */
+
+body:is(:has(.af-landing), :has(.af-notfound)) main {
+  padding: 0 !important;
+}
+body:is(:has(.af-landing), :has(.af-notfound)) .sl-markdown-content {
+  margin: 0;
+  max-width: none;
+}
+body:is(:has(.af-landing), :has(.af-notfound)) .content-panel {
+  padding: 0 !important;
+  border-bottom: 0 !important;
+}
+body:is(:has(.af-landing), :has(.af-notfound)) .content-panel .sl-container {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+/* The first content-panel only holds the page <h1> stub — hide it. */
+body:is(:has(.af-landing), :has(.af-notfound)) .content-panel:first-of-type {
+  display: none;
+}

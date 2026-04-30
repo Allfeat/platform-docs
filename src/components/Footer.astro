@@ -1,0 +1,60 @@
+---
+import Default from "@astrojs/starlight/components/Footer.astro";
+import trident from "../assets/allfeat-trident.svg";
+import { Image } from "astro:assets";
+---
+
+<Default><slot /></Default>
+
+<footer class="af-footer">
+  <div class="af-footer__brand">
+    <Image src={trident} alt="" class="af-footer__trident" loading="lazy" />
+    <span>© 2026 Allfeat<span class="af-dot">.</span></span>
+  </div>
+  <nav class="af-footer__links" aria-label="Footer">
+    <a href="https://app.allfeat.org">App</a>
+    <a href="https://github.com/Allfeat">GitHub</a>
+    <a href="https://discord.gg/rAC9MQR2GX">Discord</a>
+    <a href="https://allfeat.org">Website</a>
+  </nav>
+</footer>
+
+<style>
+  .af-footer {
+    border-top: 1px solid var(--af-line);
+    margin-top: 80px;
+    padding: 24px 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12.5px;
+    color: var(--af-ink-dimmer);
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .af-footer__brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .af-footer__trident {
+    height: 18px;
+    width: auto;
+    opacity: 0.6;
+  }
+  :root[data-theme="dark"] .af-footer__trident {
+    filter: invert(1);
+  }
+  .af-footer__links {
+    display: flex;
+    gap: 18px;
+  }
+  .af-footer__links a {
+    color: var(--af-ink-dim);
+    text-decoration: none;
+    transition: color 0.18s ease;
+  }
+  .af-footer__links a:hover {
+    color: var(--af-ink);
+  }
+</style>

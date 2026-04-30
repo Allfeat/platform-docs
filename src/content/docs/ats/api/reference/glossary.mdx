@@ -1,0 +1,20 @@
+---
+title: Glossary
+description: Key terms used throughout the Allfeat Organization API documentation — API key, scope, webhook secret, job_id, transaction_id, ats_id, commitment, and more.
+---
+
+| Term                       | Meaning                                                                                                                                                                                 |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **API key (B2B)**          | Single bearer token (`afo_sk_live_…`) bound to an organization, scoped to a set of operations. The credential discussed throughout this guide.                                          |
+| **Widget key**             | The frontend-embedded `site_key` / `secret_key` pair used to mint short-lived session JWTs for the in-browser Allfeat widget. Distinct from B2B keys; see [ATS Widget](/ats/widget/).   |
+| **Scope**                  | A capability label on the API key (`works:register`, `works:update`, `works:read`) that gates a set of routes.                                                                          |
+| **Webhook secret**         | Random 32-byte HMAC key minted alongside the API key when a `webhook_url` is configured. Used to sign every outgoing webhook delivery.                                                  |
+| `job_id`                   | Single-use server-side identifier that links the four steps of one registration (`init` → `upload` → `prepare` → `confirm`). Expires automatically.                                     |
+| `transaction_id`           | UUID assigned at confirm time; tracks the on-chain submission lifecycle. The capability for the polling REST endpoint and the WebSocket.                                                |
+| `ats_id`                   | Canonical work ID assigned by the chain on a successful registration. Stable across versions.                                                                                           |
+| **commitment**             | 32-byte hash anchoring the work on chain. Computed by the platform from your audio + metadata; you never have to derive it.                                                             |
+| `external_user_ref`        | Opaque string (≤ 255 bytes) you pass on `init` to correlate webhook callbacks back to your own user records. Echoed unchanged.                                                          |
+| **Pre-debit**              | The platform debits the org's credit balance at confirm time, before the chain submission lands. Refunded if the chain transaction fails.                                               |
+| **DLQ (dead-letter queue)** | Where exhausted webhook deliveries land after 6 failed attempts. Manual intervention required to replay.                                                                                |
+
+*Questions? Found a bug? Reach out to support with your `request_id` — every error response carries one.*

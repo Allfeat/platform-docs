@@ -1,0 +1,68 @@
+---
+title: Error Codes
+description: Unified error envelope, plus the full list of common authentication, registration, key-management, and transport error codes returned by the Organization API.
+---
+
+Every non-2xx response uses a unified envelope:
+
+```jsonc
+{
+  "error": {
+    "code":      "registration.dry_run_failed",
+    "message":   "Dry-run failed: insufficient balance to register work",
+    "details":   { "reason": "..." },     // shape depends on `code`
+    "request_id":"req_8a3f..."            // include in support tickets
+  }
+}
+```
+
+Switch on `code`, never on `message` (messages may change; codes are stable). Always log `request_id` so support can correlate to server-side traces.
+
+## Authentication / authorization
+
+| HTTP | Code                       | Meaning                                                                          |
+| ---- | -------------------------- | -------------------------------------------------------------------------------- |
+| 401  | `api_key.invalid_format`   | Bearer doesn't start with `afo_sk_live_`                                         |
+| 401  | `api_key.not_found`        | Token is unknown — wrong, leaked & rotated, or for the wrong environment         |
+| 401  | `api_key.revoked`          | Key was revoked (`revoked_at` set)                                               |
+| 403  | `api_key.org_mismatch`     | The key belongs to a different organization than the one in the URL             |
+| 403  | `api_key.scope_denied`     | Key is missing the scope this route requires (`details.required` tells you which) |
+| 403  | `api_key.org_inactive`     | The organization is soft-deleted or `is_active=false`                            |
+
+## Registration
+
+| HTTP | Code                                       | Meaning                                                                                  |
+| ---- | ------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| 422  | `registration.title_required`              | `title` is empty / whitespace-only                                                       |
+| 422  | `registration.filename_required`           | `filename` is empty                                                                      |
+| 422  | `registration.creators_required`           | `creators` array is empty                                                                |
+| 422  | `registration.commitment_invalid`          | Server-side commitment failed validation (rare)                                          |
+| 404  | `registration.upload_session_not_found`    | `job_id` is unknown / expired / already consumed                                         |
+| 403  | `registration.upload_session_forbidden`    | Caller doesn't own this upload session                                                   |
+| 413  | `registration.audio_too_large`             | Audio exceeds the configured max — `details.size_bytes` / `details.max_bytes`            |
+| 422  | `registration.audio_empty`                 | Uploaded file is 0 bytes                                                                 |
+| 422  | `registration.dry_run_failed`              | Chain dry-run rejected the submission — `details.reason`                                 |
+| 404  | `registration.prepared_not_found`          | `confirm` called after the prepare TTL expired or already confirmed once                 |
+| 403  | `registration.prepared_forbidden`          | Caller doesn't own this prepared job                                                     |
+
+## API-key management
+
+| HTTP | Code                          | Meaning                                                                                   |
+| ---- | ----------------------------- | ----------------------------------------------------------------------------------------- |
+| 422  | `api_key.invalid_name`        | Key name is empty or > 100 chars                                                          |
+| 422  | `api_key.scopes_required`     | `scopes` array is empty                                                                   |
+| 422  | `api_key.unknown_scope`       | An entry in `scopes` is not recognised — `details.value` echoes which                     |
+| 422  | `api_key.webhook_url_invalid` | `webhook_url` is not a valid `http(s)` URL — `details.reason`                             |
+| 429  | `api_key.limit_reached`       | Org has reached `api_keys.max_keys_per_org` (default 10) — `details.max`                  |
+
+## Transport
+
+| HTTP | Code                          | Meaning                                                                                   |
+| ---- | ----------------------------- | ----------------------------------------------------------------------------------------- |
+| 400  | `common.bad_request`          | Generic input rejection (e.g. malformed `Idempotency-Key`)                                |
+| 401  | `common.unauthorized`         | No credential in the request                                                              |
+| 403  | `common.forbidden`            | Generic deny — typically insufficient credits, see `details`                              |
+| 404  | `common.not_found`            | Generic not-found — resource named in `details.resource`                                  |
+| 422  | `common.validation_failed`    | Field-level validation failures — `details.fields`                                        |
+| 429  | `common.quota_exceeded`       | Freemium quota reached — `details.limit`, `details.used`, `details.resets_at`             |
+| 503  | `common.service_unavailable`  | Upstream temporarily down — retry with backoff                                            |

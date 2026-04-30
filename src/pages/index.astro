@@ -1,0 +1,17 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+import Landing from "../components/Landing.astro";
+import "../styles/splash.css";
+---
+
+<StarlightPage
+  frontmatter={{
+    title: "Allfeat Docs",
+    description: "Developer documentation for the Allfeat platform — integrate the ATS Widget or the REST API.",
+    template: "splash",
+    pagefind: false,
+    tableOfContents: false,
+  }}
+>
+  <Landing />
+</StarlightPage>

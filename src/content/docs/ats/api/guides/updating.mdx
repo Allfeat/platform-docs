@@ -1,0 +1,94 @@
+---
+title: Updating a Work
+description: Register a new version of an existing work — corrected metadata or a new asset file. The work's ats_id stays stable; only the version counter increments.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Every work can be updated with a new **version** — corrected metadata, an updated asset file, etc. The work's `ats_id` stays the same; only the version counter increments.
+
+There are two entry points depending on whether you keep the original asset:
+
+| Endpoint                                                          | When to use                                                  |
+| ----------------------------------------------------------------- | ------------------------------------------------------------ |
+| `POST /v1/organizations/{org}/works/{id}/versions/init`           | Reuse the file already on chain (only metadata changes)      |
+| `POST /v1/organizations/{org}/works/{id}/versions/init-upload`    | Upload a new asset file                                      |
+
+The rest of the flow (`/prepare` → `/confirm`) is identical to registration in spirit.
+
+## `POST /v1/organizations/{org}/works/{id}/versions/init` (reuse file)
+
+**Scope:** `works:update`
+
+### Body
+
+```json
+{
+  "network": "testnet",
+  "creators": [ /* same shape as registration */ ]
+}
+```
+
+### Response
+
+```json
+{ "job_id": "..." }
+```
+
+No upload URL is returned — the existing file is reused.
+
+## `POST /v1/organizations/{org}/works/{id}/versions/init-upload` (new file)
+
+**Scope:** `works:update`
+
+### Body
+
+```json
+{
+  "network": "testnet",
+  "filename": "track-v2.wav",
+  "creators": [ /* ... */ ]
+}
+```
+
+### Response
+
+```json
+{
+  "job_id": "...",
+  "upload_url": "https://s3.../...",
+  "upload_expires_at": "..."
+}
+```
+
+Then `PUT` the new audio to `upload_url`.
+
+## `POST /v1/organizations/{org}/works/{id}/versions/prepare`
+
+**Scope:** `works:update`
+
+Same shape as registration prepare — body is `{ "job_id": "..." }`. Returns similar fields plus a `version_deposit_credits` line covering the per-version deposit:
+
+```jsonc
+{
+  "job_id":                    "...",
+  "commitment":                "0x...",
+  "version_deposit_credits":     20,
+  "network_fee_credits":         12,
+  "service_fee_credits":          5,
+  "storage_fee_credits":          8,
+  "total_price_credits":         45,
+  "is_valid":                  true,
+  "expires_at":     "2026-04-30T11:10:00Z"
+}
+```
+
+## `POST /v1/organizations/{org}/works/{id}/versions/confirm`
+
+**Scope:** `works:update`
+
+Identical to registration confirm. Triggers a `work_updated` (or `work_failed`) webhook on completion.
+
+<Aside type="caution">
+The work must be **owned by your organization's wallet**. Trying to update a work owned by a different organization (or by a direct user) returns `403 work.access_forbidden`.
+</Aside>

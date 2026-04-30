@@ -1,0 +1,46 @@
+---
+title: Express — Webhook Receiver
+description: Express handler that verifies the HMAC signature, dispatches on event type, and acks the delivery.
+---
+
+```javascript
+const express = require("express");
+const crypto  = require("node:crypto");
+
+const app = express();
+const SECRET = Buffer.from(process.env.AF_WEBHOOK_SECRET_BASE64, "base64");
+
+app.post(
+  "/allfeat/webhooks",
+  express.raw({ type: "application/json" }),         // ← raw body!
+  (req, res) => {
+    const sig = req.header("X-Allfeat-Signature") || "";
+    const ts  = Number(req.header("X-Allfeat-Timestamp"));
+    if (Math.abs(Math.floor(Date.now() / 1000) - ts) > 300) return res.sendStatus(400);
+
+    const v1 = (sig.split(",").find(s => s.startsWith("v1=")) || "").slice(3);
+    const expected = crypto.createHmac("sha256", SECRET)
+      .update(Buffer.concat([Buffer.from(`${ts}.`), req.body]))
+      .digest("hex");
+    if (!crypto.timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(v1, "hex")))
+      return res.sendStatus(400);
+
+    const event = JSON.parse(req.body.toString("utf8"));
+    switch (event.event) {
+      case "work_registered":
+        console.log(`Registered ats_id=${event.ats_id} for user=${event.external_user_ref}`);
+        break;
+      case "work_updated":
+        console.log(`Updated ats_id=${event.ats_id}`);
+        break;
+      case "work_failed":
+        console.error(`Failed: ${event.reason}`);
+        break;
+    }
+
+    res.sendStatus(204);
+  },
+);
+
+app.listen(8080);
+```

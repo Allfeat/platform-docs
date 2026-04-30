@@ -1,0 +1,21 @@
+---
+title: Networks
+description: Pick between the testnet and mainnet Allfeat chains — block time, what's debited, and file-size rules.
+---
+
+Allfeat runs two parallel chains. You pick the target on every call via the `network` field:
+
+| Network   | Use it for                              | Block time | What gets debited from org credits                                            |
+| --------- | --------------------------------------- | ---------- | ----------------------------------------------------------------------------- |
+| `testnet` | Development, integration tests, staging | 12 s       | Storage fee only — chain fees (network fee, deposit, service fee) are waived. |
+| `mainnet` | Production registrations                | 6 s        | Full price (network fee + deposit + service fee + storage fee).               |
+
+## File-size rules (both networks)
+
+- **Storage free tier** — asset files up to **10 MB** incur no storage fee. Above that threshold, the storage fee is charged per MB and increases progressively with file size.
+- **Maximum file size** — asset files larger than **500 MB** are rejected at upload time.
+- **Per-key override** — a B2B API key can be issued with a stricter `max_file_size_bytes` cap; uploads above the per-key cap are rejected before the chain call.
+
+On testnet, this means any file ≤ 10 MB registers for **0 credits** (storage fee is 0 and chain fees are waived). Use it freely for development and integration tests.
+
+On mainnet, every component is billed — keep at least one credit-funded mainnet org separate from your testnet org so production never accidentally hits a low-balance failure.

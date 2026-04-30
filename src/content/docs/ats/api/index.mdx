@@ -1,0 +1,202 @@
+---
+title: ATS API — Overview & Quick Start
+description: Server-to-server integration guide for the Allfeat Organization API. Register and update creative works on the Allfeat blockchain on behalf of your end-users, with signed webhook callbacks.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The **Allfeat Organization API** is the server-to-server integration for partner backends driving the ATS without the widget. This guide covers the **B2B API key** family — single bearer tokens (`afo_sk_live_…`) that let your backend register and update musical works on the Allfeat chain on behalf of your end-users, and receive signed webhook callbacks when they finalize.
+
+<Aside type="note">
+This is **not** the widget flow (frontend-embedded `site_key` / `secret_key` pair → short-lived session JWT → `x-site-key` header). If you embed the Allfeat widget into your own UI, see the [Widget Integration Guide](/ats/widget/) instead.
+</Aside>
+
+## Overview
+
+The Allfeat Organization API gives your backend a programmatic equivalent of the Allfeat widget:
+
+- **Register** a piece of music as a work, anchoring its content hash and authorship metadata on-chain.
+- **Update** an existing work with a new version (corrected creators, remixed audio, etc.).
+- **Track** the resulting transaction in real time (REST poll, WebSocket, or signed webhook callback).
+- **Reconcile** completions back to your own user records via an opaque `external_user_ref` you control.
+
+Behind the scenes, every successful registration:
+
+1. Hashes the audio + metadata server-side (you never compute commitments).
+2. Submits a meta-transaction signed with the **organization's wallet** (gas paid by the platform's relayer).
+3. Debits your organization's AFT credit balance for the network fee + storage fee + service fee.
+4. Posts a `work_registered` (or `work_updated` / `work_failed`) webhook to the URL you configured on the API key — signed with an HMAC only the two of you know.
+
+You never handle private keys, gas, or chain RPC.
+
+### High-level flow
+
+```
+                     ┌──────────────────────────────────────────┐
+                     │       Your backend (your servers)         │
+                     └───────┬────────────────────┬─────────────┘
+                             │                    ▲
+                Bearer token │                    │ Signed webhook
+                             ▼                    │
+       ┌──────────────────────────────────────────┴─────────┐
+       │   POST /v1/organizations/{org}/works/init          │
+       │   PUT  <upload_url>  (presigned S3, audio bytes)   │
+       │   POST /v1/organizations/{org}/works/prepare       │
+       │   POST /v1/organizations/{org}/works/confirm       │
+       └─────────────────────────┬─────────────────────────┘
+                                 │ async chain submission
+                                 ▼
+                          Allfeat blockchain
+```
+
+You make 3 to 4 HTTP calls per registration. Everything else (signing, chain submission, indexing, fee debit, webhook delivery) happens server-side.
+
+## Quick start (5 minutes)
+
+<Aside type="tip">
+**Goal:** register a work end-to-end against testnet from your terminal.
+</Aside>
+
+### Step 1 — Create an API key
+
+In the Allfeat dashboard, open **Settings → APIs → Create new key**, and set:
+
+- **Name** — any human label, e.g. `My backend (staging)`.
+- **Scopes** — pick at least `works:register` (and `works:update` if you need versioning).
+- **Webhook URL** (optional but recommended) — `https://your-app.example.com/allfeat/webhooks`.
+
+Click *Create*. **Copy the token and the webhook secret immediately** — they are shown only once. They look like:
+
+```
+Token:          afo_sk_live_3c9e5b7a4f2d1c8e9b7a4f2d1c8e9b7a4f2d1c8e9b7a4f2d
+Webhook secret: xT8yKa…(base64)
+```
+
+### Step 2 — Register a work end-to-end
+
+Set up your environment:
+
+```bash
+export AF_API="https://api.allfeat.com"
+export AF_TOKEN="afo_sk_live_…"          # the token from step 1
+export AF_ORG="00000000-0000-0000-0000-000000000000"   # your organization UUID
+```
+
+#### a) Init — get a presigned upload URL
+
+```bash
+curl -sS -X POST "$AF_API/v1/organizations/$AF_ORG/works/init" \
+  -H "Authorization: Bearer $AF_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "network": "testnet",
+    "title": "My first track",
+    "filename": "track.wav",
+    "creators": [{
+      "full_name": "Alice Composer",
+      "email": "alice@example.com",
+      "roles": { "author": true, "composer": true, "arranger": false, "adapter": false }
+    }],
+    "external_user_ref": "user-42"
+  }'
+```
+
+Response:
+
+```json
+{
+  "job_id": "8a3f…",
+  "upload_url": "https://s3.amazonaws.com/…?X-Amz-Signature=…",
+  "upload_expires_at": "2026-04-30T11:00:00Z"
+}
+```
+
+#### b) Upload — PUT the audio bytes directly to S3
+
+```bash
+curl -sS -X PUT --upload-file ./track.wav "<upload_url from step a>"
+```
+
+#### c) Prepare — get the price estimate
+
+```bash
+curl -sS -X POST "$AF_API/v1/organizations/$AF_ORG/works/prepare" \
+  -H "Authorization: Bearer $AF_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d "{\"job_id\":\"8a3f…\"}"
+```
+
+Response (truncated):
+
+```json
+{
+  "job_id": "8a3f…",
+  "commitment": "0x4f7a…",
+  "network_fee_credits": 12,
+  "total_deposit_credits": 50,
+  "service_fee_credits": 5,
+  "storage_fee_credits": 8,
+  "total_price_credits": 75,
+  "is_valid": true,
+  "expires_at": "2026-04-30T11:05:00Z"
+}
+```
+
+The job is now reserved with the quoted price. You have ~5 minutes to confirm (the exact TTL is in `expires_at`).
+
+#### d) Confirm — submit to the blockchain
+
+```bash
+curl -sS -X POST "$AF_API/v1/organizations/$AF_ORG/works/confirm" \
+  -H "Authorization: Bearer $AF_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d "{\"job_id\":\"8a3f…\"}"
+```
+
+Response (`202 Accepted`):
+
+```json
+{
+  "transaction_id": "6f1c…",
+  "ws_url":     "/v1/ws/transactions/6f1c…",
+  "status_url": "/v1/transactions/6f1c…"
+}
+```
+
+Credits are debited immediately. The chain submission runs in the background.
+
+#### e) Wait for the webhook (or poll)
+
+Within ~10–30 seconds (testnet block time = 12s) you should receive a POST to your webhook URL:
+
+```http
+POST /allfeat/webhooks
+Content-Type: application/json
+X-Allfeat-Signature: t=1714478345,v1=8c7d…
+X-Allfeat-Timestamp: 1714478345
+
+{
+  "event": "work_registered",
+  "transaction_id": "6f1c…",
+  "organization_id": "…",
+  "api_key_id": "…",
+  "external_user_ref": "user-42",
+  "network": "testnet",
+  "ats_id": 1024,
+  "tx_hash": "0xabc…",
+  "block_number": 1234567,
+  "block_hash": "0xdef…",
+  "explorer_url": "https://explorer.allfeat.com/tx/0xabc…",
+  "finalized_at": "2026-04-30T11:00:42Z"
+}
+```
+
+Done. **Always verify the signature** before trusting the body — see [Webhook signatures](/ats/api/guides/webhooks/#verifying-webhook-signatures).
+
+## Next steps
+
+- [Authentication](/ats/api/guides/authentication/) — bearer token format, organization binding, what the key cannot do.
+- [Scopes](/ats/api/guides/scopes/) — pick the right capability set for your integration.
+- [Registering a work](/ats/api/guides/registering/) — full reference for the `init` / `upload` / `prepare` / `confirm` flow.
+- [Webhooks](/ats/api/guides/webhooks/) — payload shapes, signature verification (Node, Python, Rust).
+- [Security checklist](/ats/api/guides/security/) — production hardening.

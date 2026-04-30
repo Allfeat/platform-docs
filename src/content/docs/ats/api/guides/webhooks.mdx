@@ -1,0 +1,188 @@
+---
+title: Webhooks
+description: Webhook payload shapes, signature verification (Node.js / Python / Rust reference implementations), acknowledgement semantics, retry schedule, and idempotency on your side.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+If you set `webhook_url` when creating the API key, the platform delivers a signed POST to that URL when each transaction finalizes (success or failure).
+
+## Payload shapes
+
+### Wire format
+
+```http
+POST <your_webhook_url>
+Content-Type: application/json
+X-Allfeat-Signature: t=<unix_ts>,v1=<hex_hmac_sha256>
+X-Allfeat-Timestamp: <unix_ts>
+```
+
+### `work_registered` / `work_updated`
+
+```jsonc
+{
+  "event": "work_registered",            // or "work_updated"
+  "transaction_id":   "6f1c...",
+  "organization_id":  "…",
+  "api_key_id":       "…",               // the key that triggered the work
+  "external_user_ref":"user-42",         // present only if you set it on init
+  "network":          "testnet",         // or "mainnet"
+  "ats_id":           1024,              // canonical work ID on chain
+  "tx_hash":          "0xabc...",
+  "block_number":     1234567,
+  "block_hash":       "0xdef...",
+  "access_code":      "atc_...",         // present only when applicable
+  "explorer_url":     "https://explorer.allfeat.com/tx/0xabc...",
+  "finalized_at":     "2026-04-30T11:00:42Z"
+}
+```
+
+### `work_failed`
+
+```jsonc
+{
+  "event":             "work_failed",
+  "transaction_id":    "6f1c...",
+  "organization_id":   "…",
+  "api_key_id":        "…",
+  "external_user_ref": "user-42",
+  "reason":            "Insufficient balance / chain error / quota exceeded / ...",
+  "failed_at":         "2026-04-30T11:00:50Z"
+}
+```
+
+<Aside type="caution">
+Always switch on `event` first. Field sets differ between success and failure events.
+</Aside>
+
+## Verifying webhook signatures
+
+The signature is a Stripe-style HMAC-SHA256 over `"<timestamp>.<body>"`, formatted as `t=<unix>,v1=<hex>`. The secret is the `webhook_secret_base64` you saved at key creation, base64-decoded back to raw bytes.
+
+Before you trust any webhook payload:
+
+1. Read the `X-Allfeat-Signature` header.
+2. Recompute `HMAC_SHA256(secret_bytes, "<timestamp>.<raw_body_bytes>")`.
+3. Constant-time-compare to the `v1=…` part.
+4. Verify `|now - timestamp| ≤ 300 seconds` (5 minutes). The platform retries over a longer window than that, so accept up to **5 minutes** of skew — anything older is replay.
+
+### Reference implementations
+
+#### Node.js (built-in crypto)
+
+```javascript
+const crypto = require("crypto");
+
+function verifyAllfeatSignature(rawBody, header, secretBase64, toleranceSec = 300) {
+  // header: "t=1714478345,v1=8c7d..."
+  const parts = Object.fromEntries(
+    header.split(",").map(kv => kv.split("=").map(s => s.trim())),
+  );
+  const ts = Number(parts.t);
+  const sig = parts.v1;
+  if (!Number.isFinite(ts) || typeof sig !== "string") return false;
+
+  const now = Math.floor(Date.now() / 1000);
+  if (Math.abs(now - ts) > toleranceSec) return false;
+
+  const secret = Buffer.from(secretBase64, "base64");
+  const signed = Buffer.concat([Buffer.from(`${ts}.`), Buffer.from(rawBody)]);
+  const expected = crypto.createHmac("sha256", secret).update(signed).digest("hex");
+
+  return crypto.timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(sig, "hex"));
+}
+```
+
+#### Python (hmac + hashlib)
+
+```python
+import base64, hmac, hashlib, time
+
+def verify_allfeat_signature(raw_body: bytes, header: str, secret_b64: str,
+                             tolerance: int = 300) -> bool:
+    parts = dict(kv.split("=", 1) for kv in header.split(","))
+    ts = int(parts["t"])
+    sig = parts["v1"]
+    if abs(int(time.time()) - ts) > tolerance:
+        return False
+
+    secret = base64.b64decode(secret_b64)
+    signed = f"{ts}.".encode() + raw_body
+    expected = hmac.new(secret, signed, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, sig)
+```
+
+#### Rust (hmac + sha2)
+
+```rust
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+fn verify(raw_body: &[u8], header: &str, secret_b64: &str, now: i64, tolerance: i64) -> bool {
+    let mut ts: Option<i64> = None;
+    let mut sig: Option<&str> = None;
+    for part in header.split(',') {
+        if let Some((k, v)) = part.split_once('=') {
+            match k.trim() {
+                "t"  => ts  = v.trim().parse().ok(),
+                "v1" => sig = Some(v.trim()),
+                _ => {}
+            }
+        }
+    }
+    let (ts, sig) = match (ts, sig) { (Some(t), Some(s)) => (t, s), _ => return false };
+    if (now - ts).abs() > tolerance { return false; }
+
+    let Ok(secret) = STANDARD.decode(secret_b64) else { return false };
+    let mut mac = <Hmac<Sha256>>::new_from_slice(&secret).expect("any size");
+    let mut signed = ts.to_string().into_bytes();
+    signed.push(b'.');
+    signed.extend_from_slice(raw_body);
+    mac.update(&signed);
+    let expected = hex::encode(mac.finalize().into_bytes());
+
+    use subtle::ConstantTimeEq;
+    expected.as_bytes().ct_eq(sig.as_bytes()).into()
+}
+```
+
+<Aside type="caution">
+**Always verify against the raw bytes of the body**, before any framework parses it as JSON. Re-serializing JSON changes whitespace and breaks the signature.
+</Aside>
+
+## Acknowledging deliveries
+
+- Reply with **any 2xx** status (typically `200 OK` or `204 No Content`) to acknowledge.
+- 4xx (other than `408` and `429`) is treated as a **permanent** failure: no retry, the delivery moves to the dead-letter queue. Use this for unrecoverable bad payloads.
+- 5xx, `408`, `429`, network errors, or no response within 30 s ⇒ retry.
+
+## Retry schedule
+
+Failed deliveries are retried with exponential backoff:
+
+| Attempt    | Wait before next try |
+| ---------- | -------------------- |
+| 1 → 2      | 1 s                  |
+| 2 → 3      | 5 s                  |
+| 3 → 4      | 30 s                 |
+| 4 → 5      | 2 min                |
+| 5 → 6      | 10 min               |
+| 6 → DLQ    | 30 min               |
+
+After 6 unsuccessful attempts the delivery is moved to a dead-letter queue for operator inspection — the chain transaction is not affected, but you will not receive that webhook automatically. Catch up via the REST status endpoint or contact support.
+
+## Idempotency on your side
+
+We may deliver the same event more than once (network blips, your 5xx during ack). Treat each `transaction_id` as a unique key; re-applying a delivery you already processed must be a no-op. The simplest pattern:
+
+```sql
+CREATE UNIQUE INDEX webhook_dedupe ON allfeat_events (transaction_id);
+```
+
+…and `INSERT … ON CONFLICT DO NOTHING` in your handler.
+
+## No webhook URL configured?
+
+If you create a key without a `webhook_url`, no webhooks are sent — use REST polling or the WebSocket. Webhook configuration is **immutable**: there is no update endpoint by design (the secret is sealed at creation). To switch, create a new key with the new URL and revoke the old one.

@@ -1,0 +1,14 @@
+---
+title: Scopes
+description: Capability scopes carried by Organization API keys and the routes they unlock.
+---
+
+A B2B key carries a list of scopes; missing a required scope returns `403` with `api_key.scope_denied`.
+
+| Scope            | Routes it unlocks                                                                                               |
+| ---------------- | --------------------------------------------------------------------------------------------------------------- |
+| `works:register` | All `POST /v1/organizations/{org}/works/init` \| `/prepare` \| `/confirm`                                       |
+| `works:update`   | All `POST /v1/organizations/{org}/works/{id}/versions/init` \| `/init-upload` \| `/prepare` \| `/confirm`       |
+| `works:read`     | Reserved for future read endpoints — currently a no-op (no routes gated by it yet)                              |
+
+Pick the smallest set that matches your integration. You can mix scopes on a single key (most partners use `works:register` + `works:update` together).

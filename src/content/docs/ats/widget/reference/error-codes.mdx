@@ -1,0 +1,132 @@
+---
+title: Error Codes
+description: Reference for all error codes emitted by the ATS Widget — dotted code format, user-facing messages, and recommended recovery actions.
+---
+
+Error codes appear in the `code` field of `allfeat:failed` and `allfeat:error` event payloads. All backend errors use dotted notation (e.g., `session.origin_not_allowed`). Widget-internal errors are prefixed with `widget.`.
+
+## Session & Auth
+
+| Code | Message | Recommended Action |
+|------|---------|-------------------|
+| `session.invalid_token` | Your session has expired. Please refresh your credentials. | Handled automatically via `allfeat:token-expired` |
+| `session.key_inactive` | This widget is currently disabled. | Contact administrator — shown on DISABLED screen |
+| `session.widget_not_enabled` | The widget feature is not enabled for your organization. | Contact administrator |
+| `session.origin_not_allowed` | This website is not authorized to use the widget. | Verify domain is in the allowed origins list |
+| `session.rate_limited` | Too many requests. Please wait a moment. | Wait and retry |
+| `common.auth.missing_token` | Authentication is required. | Provide a valid token via `setToken()` |
+| `common.auth.expired` | Your session has expired. | Refresh the token |
+| `common.auth.invalid_token` | Your authentication token is invalid. | Provide a new token |
+| `common.auth.invalid_api_key` | The API key is invalid. | Contact administrator |
+| `common.auth.jwks_unavailable` | Authentication service temporarily unavailable. | Retry later |
+| `common.auth.backend_unavailable` | Authentication service temporarily unavailable. | Retry later |
+
+## Configuration
+
+These errors show the **DISABLED** screen (no retry button):
+
+| Code | Message | Recommended Action |
+|------|---------|-------------------|
+| `session.key_inactive` | Widget disabled. | Check organization dashboard |
+| `session.widget_not_enabled` | Widget not enabled. | Enable widget in organization settings |
+| `session.origin_not_allowed` | Origin not authorized. | Add domain to allowed origins |
+| `organization.not_found` | Organization not found. | Verify `site-key` attribute |
+| `organization.inactive` | Organization inactive. | Contact Allfeat support |
+| `organization.no_integration` | No integration configured. | Configure integration in dashboard |
+| `common.auth.invalid_api_key` | Invalid API key. | Verify API key configuration |
+
+## Registration
+
+| Code | Message | Recommended Action |
+|------|---------|-------------------|
+| `registration.duplicate_title` | A work with this title already exists. | Choose a different title |
+| `registration.audio_too_large` | The asset file is too large (`{size_mb}` MB). Max: `{max_mb}` MB. | Reduce file size |
+| `registration.invalid_audio_format` | Audio format not supported. | Use a supported format |
+| `registration.insufficient_credits` | Insufficient credits. | Top up credits |
+
+## Works & Access
+
+| Code | Message | Recommended Action |
+|------|---------|-------------------|
+| `work.not_found` | Work not found. | Verify work ID |
+| `work.already_registered` | Work already registered. | — |
+| `access_code.not_found` | Access code invalid or doesn't exist. | Verify access code |
+| `access_code.expired` | Access code expired. | — |
+
+## Transaction
+
+| Code | Message | Recommended Action |
+|------|---------|-------------------|
+| `transaction.not_found` | Transaction not found. | — |
+| `transaction.store_unavailable` | Transaction service unavailable. | Retry later |
+| `transaction.already_confirmed` | Transaction already confirmed. | — |
+| `transaction.expired` | Transaction expired. | Start over |
+
+## Common
+
+| Code | Message | Recommended Action |
+|------|---------|-------------------|
+| `common.rate_limited` | Too many requests. | Wait and retry |
+| `common.validation_failed` | Submitted data invalid. | Check input data |
+| `common.service_unavailable` | Service temporarily unavailable. | Retry later |
+| `common.not_found` | Resource not found. | — |
+
+## Widget-Internal
+
+These are client-side errors without a `requestId`:
+
+| Code | Description | Recommended Action |
+|------|-------------|-------------------|
+| `widget.network_error` | Network connectivity issue. | Check internet connection |
+| `widget.upload_error` | File upload to S3 failed. | Widget retries automatically (3 attempts) |
+| `widget.malformed_response` | Server returned an unexpected response. | Retry; report if persistent |
+| `widget.unknown_error` | Fallback for unrecognized errors. | Report if persistent |
+| `widget.configuration_error` | Widget configuration issue. | Check widget attributes |
+
+## Error Handling Patterns
+
+### Centralized Error Logging
+
+```javascript
+const widget = document.querySelector('ats-widget');
+
+['allfeat:failed', 'allfeat:error'].forEach(eventName => {
+  widget.addEventListener(eventName, (e) => {
+    console.error(`[ATS ${eventName}]`, e.detail);
+
+    analytics.track('ats_error', {
+      event: eventName,
+      code: e.detail.code,
+      message: e.detail.message,
+      requestId: e.detail.requestId,
+    });
+  });
+});
+```
+
+### Conditional Recovery
+
+```javascript
+widget.addEventListener('allfeat:failed', (e) => {
+  const { code, requestId } = e.detail;
+
+  if (code.startsWith('session.') || code.startsWith('common.auth.')) {
+    // Auth errors — handled by allfeat:token-expired
+    return;
+  }
+
+  if (code.startsWith('organization.') || code === 'session.key_inactive') {
+    // Config errors — DISABLED screen shown, no recovery
+    showMessage('Please contact your administrator. Reference: ' + requestId);
+    return;
+  }
+
+  if (code === 'common.rate_limited') {
+    showMessage('Please wait a moment and try again.');
+    return;
+  }
+
+  // Default: retry
+  showMessage('An error occurred. Please try again.');
+});
+```

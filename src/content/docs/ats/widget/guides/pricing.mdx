@@ -1,0 +1,94 @@
+---
+title: Pricing & Credits
+description: Understand the fee structure for ATS registrations — network fees, deposits, service fees, and credit balance management.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The ATS Widget is self-serve — there's no subscription required. Anyone can sign up on [app.allfeat.org](https://app.allfeat.org) and create an organization to start using the widget. Each user can create **up to 3 organizations for free**. Usage is billed per registration from the organization's credit balance.
+
+## Per-Registration Fees
+
+Every blockchain operation has four fee components:
+
+| Fee | Description |
+|-----|-------------|
+| **Network fee** | The blockchain transaction cost. Estimated via a dry-run simulation before the actual submission. |
+| **Deposit** | On-chain storage deposit required by the Allfeat blockchain. Includes a base deposit (for new works) or a version deposit (for version updates). |
+| **Service fee** | Allfeat platform fee, calculated as a percentage (basis points) of the transaction cost. |
+| **Storage fee** | Media storage fee. Asset files up to **10 MB** are stored for free. Above 10 MB, a storage fee is charged that increases progressively with file size. |
+
+The **total price** displayed in the widget is the sum of all four:
+
+```
+total_price = network_fee + deposit + service_fee + storage_fee
+```
+
+## How It Works
+
+The pricing is calculated during the **prepare** phase of the registration flow:
+
+1. The user fills the form and submits
+2. The widget calls `POST /v1/works/prepare` (or `/versions/prepare`)
+3. The API performs a **dry-run simulation** of the blockchain transaction
+4. The response includes the exact pricing breakdown:
+   - `network_fee_credits` — estimated blockchain transaction cost
+   - `total_deposit_credits` — on-chain storage deposit
+   - `service_fee_credits` — platform service fee
+   - `storage_fee_credits` — media storage fee (0 for files up to 10 MB)
+   - `total_price_credits` — sum of all fees
+5. The widget proceeds to confirmation and deducts credits automatically
+
+<Aside type="note">
+Your integration doesn't need to handle pricing logic. The widget manages the entire flow internally. Credits are deducted from your organization's balance when the transaction is confirmed.
+</Aside>
+
+## Credit Balance
+
+### Checking Your Balance
+
+Monitor your credit balance in the [Allfeat Dashboard](https://app.allfeat.org).
+
+### Insufficient Credits
+
+If your organization's credit balance is too low:
+
+- **Session creation** (`POST /v1/sessions`) will fail — preventing any widget operation
+- Your backend will receive an error response when trying to obtain a token
+
+Handle this gracefully in your backend:
+
+```typescript title="backend/routes/ats-token.ts"
+const response = await fetch('https://organizations.api.allfeat.org/v1/sessions', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'Origin': 'https://yoursite.com' // domain where the widget is embedded },
+  body: JSON.stringify({
+    secret_key: process.env.ALLFEAT_SECRET_KEY,
+    action_type: 'register',
+    allowed_network: 'testnet',
+  }),
+});
+
+if (!response.ok) {
+  const error = await response.json();
+  // Handle insufficient credits or other errors
+  return res.status(response.status).json({
+    error: 'Unable to start registration. Please try again later.',
+  });
+}
+```
+
+### Topping Up
+
+Credits can be purchased and managed through the [Allfeat Dashboard](https://app.allfeat.org).
+
+## Pricing Differences by Operation
+
+| Operation | Fees Included |
+|-----------|---------------|
+| **Register** (new work) | Network fee + base deposit + version deposit + service fee + storage fee |
+| **Update** (new version) | Network fee + version deposit + service fee + storage fee |
+
+<Aside type="note">
+The **storage fee** only applies when the uploaded asset file exceeds 10 MB. For files up to 10 MB, the storage fee is 0.
+</Aside>

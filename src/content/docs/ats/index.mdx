@@ -1,0 +1,70 @@
+---
+title: ATS Overview
+description: Allfeat Time Stamp (ATS) lets you anchor creative works on the Allfeat blockchain. Choose between the white-label widget (frontend) or the Organization API (backend).
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+**ATS** (Allfeat Time Stamp) is the Allfeat service for anchoring creative works on the blockchain. A single registration produces a permanent, verifiable on-chain record linking an audio asset to its creators and metadata.
+
+## Two integration paths
+
+You can integrate ATS into your platform in two ways. Pick the one that matches your architecture.
+
+| Property                  | [Widget](/ats/widget/)                                        | [API](/ats/api/)                                                       |
+| ------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| **Where it runs**         | Your frontend (web component embedded in your page)           | Your backend (server-to-server HTTP)                                   |
+| **End-user interaction**  | Yes — the widget renders the form and the upload UI           | No — you build any UI; the API never touches the browser               |
+| **Credential**            | `site_key` (public) + `secret_key` (server-side, mints JWTs)  | `afo_sk_live_…` bearer token (server-side only)                        |
+| **Session model**         | Short-lived JWT (~5 min, one-time-use) issued per user action | Long-lived bearer token bound to the organization                      |
+| **Audio handling**        | The widget uploads via a presigned S3 URL directly from the browser | Your backend gets a presigned S3 URL and uploads server-side     |
+| **End-user identity**     | Abstracted; user holds the access code                        | Abstracted; you correlate via opaque `external_user_ref`               |
+| **Webhooks**              | Not exposed (use the `allfeat:complete` Custom Event)         | Yes — signed `work_registered` / `work_updated` / `work_failed` POSTs  |
+| **Update flow**           | User enters access code in the widget UI                      | Your backend calls `/v1/organizations/{org}/works/{id}/versions/...`   |
+| **Best for**              | Web platforms wanting a drop-in registration UI               | B2B partners with their own UI, batch flows, or non-web clients        |
+
+### Choose the Widget if…
+
+- You have a **web frontend** and want a ready-made registration UX without building forms, upload flows, or progress tracking yourself.
+- Your end-users register their **own** works and you want them to hold their own access codes.
+- You're fine with **direct browser → Allfeat** uploads (CORS-friendly).
+
+### Choose the API if…
+
+- Your registrations come from a **backend pipeline** (mass-ingest, batch jobs, cron) with no user-facing browser flow.
+- You're integrating from **mobile, desktop, or non-browser** clients.
+- You want **signed webhooks** on completion to drive your own state machine.
+- You need **idempotency keys** and explicit control of every retry.
+
+<Aside type="tip">
+The two paths are not mutually exclusive. A platform can ship a widget for self-serve users while running the API for a separate B2B onboarding flow — each with its own keys.
+</Aside>
+
+## Pricing
+
+Each registration or version update has up to four fee components:
+
+| Fee             | Description                                                                         |
+| --------------- | ----------------------------------------------------------------------------------- |
+| Network fee     | Blockchain transaction cost, estimated via dry-run simulation                       |
+| Deposit         | On-chain storage deposit for the work or version                                    |
+| Service fee     | Allfeat platform fee (applied as basis points on the transaction)                   |
+| Storage fee     | Media storage fee — free up to **10 MB**, increases progressively above            |
+
+What actually gets debited from your organization's credit balance depends on the network:
+
+- **Mainnet** — full price is debited (network fee + deposit + service fee + storage fee).
+- **Testnet** — chain fees are waived; only the **storage fee** is debited (so any file ≤ 10 MB is free).
+
+Fees are deducted automatically; calls fail if your balance is insufficient. Pricing details are returned during the `prepare` phase of the registration flow.
+
+## Networks
+
+Allfeat runs two parallel chains. You pick the target on every call via the `network` field.
+
+| Network   | Use it for                              | Block time | What you pay                                                          |
+| --------- | --------------------------------------- | ---------- | --------------------------------------------------------------------- |
+| `testnet` | Development, integration tests, staging | 12 s       | Storage fee only (chain fees waived). Files ≤ 10 MB cost 0 credits. |
+| `mainnet` | Production registrations                | 6 s        | Full price debited from org credits.                                  |
+
+Asset files up to **500 MB** are accepted on both networks. See [Networks](/ats/api/guides/networks/) for details.

@@ -1,0 +1,148 @@
+---
+title: Registering a Work
+description: Full reference for the 3-step registration flow — init, upload, prepare, confirm — including request bodies, responses, and common error codes.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Registration is a **3-step flow** designed so your backend never holds binary audio in flight, and so you can show a price quote to the user before charging:
+
+```
+POST  /v1/organizations/{org}/works/init      ─►  presigned upload URL
+PUT   <upload_url> (audio bytes)               ─►  S3
+POST  /v1/organizations/{org}/works/prepare   ─►  hash + price quote
+POST  /v1/organizations/{org}/works/confirm   ─►  on-chain submission
+```
+
+## `POST /v1/organizations/{organization_id}/works/init`
+
+**Scope:** `works:register`
+
+Reserves a server-side upload session and returns a presigned URL valid for ~10 minutes.
+
+### Headers
+
+| Header                          | Required | Notes                                                                  |
+| ------------------------------- | -------- | ---------------------------------------------------------------------- |
+| `Authorization: Bearer <token>` | yes      |                                                                        |
+| `Idempotency-Key: <uuid>`       | optional | Replay-safe for 24h, see [Idempotency](/ats/api/guides/idempotency/).  |
+
+### Body
+
+```json
+{
+  "network": "testnet",                 // or "mainnet"
+  "title": "Track title",               // 1..N chars, trimmed
+  "filename": "track.wav",              // user-visible filename
+  "creators": [
+    {
+      "full_name": "Alice Composer",
+      "email": "alice@example.com",
+      "roles": {
+        "author":   true,               // AT
+        "composer": true,               // CP
+        "arranger": false,              // AR
+        "adapter":  false               // AD
+      },
+      "ipi":  "00000000123",            // optional
+      "isni": "0000000123456789"        // optional
+    }
+  ],
+  "external_user_ref": "user-42"        // optional, ≤255 bytes, see External User References
+}
+```
+
+<Aside type="note">
+The inner `passphrase` field documented elsewhere in the API is for the direct-user flow only. For organization API keys it is **ignored**: the organization's wallet signs every meta-transaction, no end-user passphrase is involved.
+</Aside>
+
+### Response (`200 OK`)
+
+```json
+{
+  "job_id":           "8a3f...",
+  "upload_url":       "https://s3.../...",
+  "upload_expires_at":"2026-04-30T11:00:00Z"
+}
+```
+
+### Common errors
+
+`401` (missing/invalid token), `403` (scope or org mismatch), `422` (empty title / no creators / invalid file name), `429` (org-level key-limit). See [Error Codes](/ats/api/reference/errors/).
+
+## Audio upload
+
+`PUT` the raw audio bytes to `upload_url`. The presigned URL is single-use, short-lived, and scoped to the exact object key the platform will look up in the next step.
+
+```bash
+curl -X PUT --upload-file ./track.wav "$UPLOAD_URL"
+```
+
+No `Authorization` header — the URL itself is the credential.
+
+## `POST /v1/organizations/{organization_id}/works/prepare`
+
+**Scope:** `works:register`
+
+Downloads the audio you just uploaded, computes the cryptographic commitment, dry-runs the on-chain submission, and returns a binding price quote.
+
+### Body
+
+```json
+{ "job_id": "8a3f..." }
+```
+
+### Response (`200 OK`)
+
+```jsonc
+{
+  "job_id":              "8a3f...",
+  "work_id":             "8a3f...",     // same as job_id during prepare
+  "commitment":          "0x4f7a...",   // 0x-prefixed 32-byte hex
+  "network_fee_credits":     12,        // chain fee
+  "total_deposit_credits":   50,        // ATS deposit (refundable on chain)
+  "service_fee_credits":      5,        // platform service fee
+  "storage_fee_credits":      8,        // pro-rata of audio size
+  "total_price_credits":     75,        // what you pay (sum of the above, minus deposit)
+  "is_valid":              true,
+  "expires_at":  "2026-04-30T11:05:00Z" // ~5 min, clamped to era mortality
+}
+```
+
+If `is_valid` is `false`, the response error envelope explains why (typically the dry-run failed on-chain — bad metadata, insufficient organization balance). See [Error Codes](/ats/api/reference/errors/).
+
+<Aside type="tip">
+This is the moment to display the quote to your user and ask them to confirm. After `expires_at`, the job is gone and you must restart from `init`.
+</Aside>
+
+### Common errors
+
+`401`, `403`, `404` (`registration.upload_session_not_found` when `job_id` is unknown or expired), `413` (asset file too large), `422` (`registration.dry_run_failed`).
+
+## `POST /v1/organizations/{organization_id}/works/confirm`
+
+**Scope:** `works:register`
+
+Pre-debits the quoted price from the **organization's** AFT credit balance, then submits the registration to chain asynchronously.
+
+### Body
+
+```json
+{ "job_id": "8a3f..." }
+```
+
+### Response (`202 Accepted`)
+
+```json
+{
+  "transaction_id": "6f1c...",
+  "ws_url":     "/v1/ws/transactions/6f1c...",
+  "status_url": "/v1/transactions/6f1c..."
+}
+```
+
+Now wait for completion via webhook (recommended), WebSocket, or REST polling — see [Tracking Transactions](/ats/api/guides/tracking/).
+
+### Common errors
+
+`401`, `403` (scope / org / not active), `404` (`registration.prepared_not_found` — the prepare TTL has elapsed or the job was already confirmed once; confirms are atomic GETDEL, so a second confirm always 404s).

@@ -1,0 +1,26 @@
+---
+title: Key Lifecycle
+description: Create, list, revoke, and rotate Organization API keys — including the zero-downtime rotation pattern.
+---
+
+## Create
+
+`POST /v1/organizations/{organization_id}/api-keys` — admin-only (Auth0 session). Returns the token + base64 webhook secret **once**. After this response, neither value is recoverable.
+
+## List
+
+`GET /v1/organizations/{organization_id}/api-keys` — admin-only. Returns metadata for each key (name, prefix, scopes, webhook URL, `created_at`, `last_used_at`, `revoked_at`). **Never** returns the token or the secret.
+
+## Revoke
+
+`DELETE /v1/organizations/{organization_id}/api-keys/{api_key_id}` — admin-only. Idempotent: revoking an already-revoked key returns `204` with no side effects. Effective immediately on the next request.
+
+## Rotate
+
+There is **no rotate endpoint** by design — webhook secrets are sealed at creation. To rotate:
+
+1. Create a new key with the same scopes + webhook URL.
+2. Deploy the new token + secret to your backend.
+3. Once you've confirmed traffic is hitting the new key (`last_used_at` updates in the dashboard), revoke the old one.
+
+This zero-downtime pattern keeps you on a known-good credential at all times.

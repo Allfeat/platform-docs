@@ -1,0 +1,22 @@
+---
+title: Python — Transaction Polling
+description: Synchronous Python helper that polls the REST status endpoint until a transaction reaches its terminal state, with a timeout.
+---
+
+```python
+import os, time, requests
+
+API   = os.environ["AF_API"]
+TOKEN = os.environ["AF_TOKEN"]
+
+def wait_for(transaction_id, *, timeout=120, interval=2):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        r = requests.get(f"{API}/v1/transactions/{transaction_id}", timeout=5)
+        r.raise_for_status()
+        body = r.json()
+        if body["is_complete"]:
+            return body
+        time.sleep(interval)
+    raise TimeoutError(f"transaction {transaction_id} did not finalize")
+```

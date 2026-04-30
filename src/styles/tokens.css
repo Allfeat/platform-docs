@@ -1,0 +1,124 @@
+/* ============================================================
+   Allfeat Design Tokens — palette, typography, surfaces.
+   Source: Allfeat Charte Graphique V1.
+   ============================================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+@font-face {
+  font-family: "TASA Orbiter Display";
+  src: url("/fonts/TASAOrbiter-VariableFont_wght.ttf") format("truetype-variations"),
+       url("/fonts/TASAOrbiter-VariableFont_wght.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "TASA Orbiter Text";
+  src: url("/fonts/TASAOrbiter-VariableFont_wght.ttf") format("truetype-variations"),
+       url("/fonts/TASAOrbiter-VariableFont_wght.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* ---------- Brand palette ---------- */
+  --af-cream-50:  #FFFBEB;
+  --af-cream-100: #EDE8D5;
+  --af-cream-200: #C4C0B1;
+  --af-cream-300: #A19F95;
+
+  --af-ink-900: #151515;
+  --af-ink-800: #1C1C1B;
+  --af-ink-700: #2C2C2A;
+  --af-ink-600: #3A3A37;
+  --af-ink-500: #504F4B;
+  --af-ink-400: #676660;
+  --af-ink-300: #8A8880;
+
+  --af-red-500: #FF4A5F;
+  --af-red-600: #E84558;
+  --af-red-700: #C43D4D;
+  --af-red-800: #A13541;
+
+  --af-teal-500: #00B18C;
+  --af-teal-600: #02A180;
+  --af-teal-700: #058A6E;
+  --af-teal-800: #08735C;
+
+  --af-amber-500: #FFB454;
+  --af-blue-500:  #5BA9FF;
+
+  /* RGB triplets — for use with rgba(var(--af-*-rgb), <alpha>). */
+  --af-red-rgb:     255, 74, 95;
+  --af-red-700-rgb: 196, 61, 77;
+  --af-teal-rgb:    0, 177, 140;
+  --af-amber-rgb:   255, 180, 84;
+  --af-blue-rgb:    91, 169, 255;
+  --af-cream-rgb:   255, 251, 235;
+  --af-ink-rgb:     21, 21, 21;
+
+  /* ---------- Typography stacks ---------- */
+  --af-font-display: "TASA Orbiter Display", "TASA Orbiter", "Space Grotesk", system-ui, sans-serif;
+  --af-font-text:    "TASA Orbiter Text", "TASA Orbiter", "Space Grotesk", system-ui, sans-serif;
+  --af-font-mono:    "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
+
+  /* ---------- Motion ---------- */
+  --af-easing-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* ---------- Theme: dark ---------- */
+:root,
+:root[data-theme="dark"] {
+  --af-bg:            #0B0B0A;
+  --af-bg-1:          #151513;
+  --af-bg-1-solid:    #151513;
+  --af-bg-elev-solid: #181816;
+
+  --af-line:    rgba(var(--af-cream-rgb), 0.09);
+  --af-line-2:  rgba(var(--af-cream-rgb), 0.16);
+
+  --af-ink:        var(--af-cream-50);
+  --af-ink-dim:    var(--af-cream-200);
+  --af-ink-dimmer: var(--af-cream-300);
+
+  --af-accent-pos: var(--af-teal-500);
+  --af-accent-neg: var(--af-red-500);
+
+  --af-chip-bg: rgba(var(--af-cream-rgb), 0.05);
+  --af-chip-bd: rgba(var(--af-cream-rgb), 0.09);
+  --af-hover:   rgba(var(--af-cream-rgb), 0.04);
+
+  --af-grid-dot: rgba(var(--af-cream-rgb), 0.045);
+
+  --af-shadow:      0 1px 0 rgba(var(--af-cream-rgb), 0.05) inset, 0 2px 4px rgba(0, 0, 0, 0.45), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  --af-shadow-lift: 0 1px 0 rgba(var(--af-cream-rgb), 0.08) inset, 0 12px 40px -8px rgba(0, 0, 0, 0.75), 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* ---------- Theme: light ---------- */
+:root[data-theme="light"] {
+  --af-bg:            #FBF6E3;
+  --af-bg-1:          #FFFBEB;
+  --af-bg-1-solid:    #FFFBEB;
+  --af-bg-elev-solid: #FFFBEB;
+
+  --af-line:    rgba(var(--af-ink-rgb), 0.08);
+  --af-line-2:  rgba(var(--af-ink-rgb), 0.14);
+
+  --af-ink:        var(--af-ink-900);
+  --af-ink-dim:    var(--af-ink-500);
+  --af-ink-dimmer: var(--af-ink-400);
+
+  --af-accent-pos: var(--af-teal-700);
+  --af-accent-neg: var(--af-red-700);
+
+  --af-chip-bg: rgba(var(--af-ink-rgb), 0.04);
+  --af-chip-bd: rgba(var(--af-ink-rgb), 0.08);
+  --af-hover:   rgba(var(--af-ink-rgb), 0.035);
+
+  --af-grid-dot: rgba(var(--af-ink-rgb), 0.05);
+
+  --af-shadow:      0 1px 0 rgba(255, 255, 255, 0.5) inset, 0 1px 2px rgba(var(--af-ink-rgb), 0.04);
+  --af-shadow-lift: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 10px 32px -10px rgba(var(--af-ink-rgb), 0.14), 0 2px 6px rgba(var(--af-ink-rgb), 0.06);
+}

@@ -1,0 +1,30 @@
+---
+title: Authentication
+description: How to authenticate Organization API requests with an Allfeat B2B bearer token, what the key is bound to, and what it cannot do.
+---
+
+Every B2B request carries the API key as a bearer token:
+
+```http
+Authorization: Bearer afo_sk_live_<48 hex>
+```
+
+## Token format
+
+| Part           | Value                          | Length    |
+| -------------- | ------------------------------ | --------- |
+| Public prefix  | `afo_sk_live_`                 | 12 chars  |
+| Random suffix  | 24 random bytes, hex-encoded   | 48 chars  |
+| Total          | —                              | 60 chars  |
+
+The first 12 characters (`afo_sk_live_`) are stored in plaintext for display in the dashboard; the rest is only ever stored as a SHA-256 hash. **We can never recover a token if you lose it** — revoke the key and create a new one.
+
+## Where the key applies
+
+A key is bound to **exactly one organization**. The path you call must include the matching `{organization_id}`; mismatches return `403`. This is enforced **before** any handler logic runs, so a leaked key cannot be used against a different organization even if the URL is wrong.
+
+## What the key cannot do
+
+- Manage other API keys (those routes require an Auth0 admin session).
+- Read/write user profiles, balances, or non-organization-scoped resources.
+- Sign payloads outside the configured scope set (see [Scopes](/ats/api/guides/scopes/)).

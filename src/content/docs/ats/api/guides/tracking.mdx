@@ -1,0 +1,85 @@
+---
+title: Tracking Transactions
+description: Track on-chain submission progress via webhooks (recommended), REST polling, or WebSocket — including step values, frame types, and recommended cadence.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Every `confirm` call returns a `transaction_id` and two tracking URLs. Pick whichever fits your runtime.
+
+## Webhooks (recommended)
+
+If the API key was created with a `webhook_url`, you receive a single `work_registered` / `work_updated` / `work_failed` POST when the chain transaction reaches finality. This is the canonical, durable notification — no connection to keep open, and durable retries on your behalf.
+
+See [Webhooks](/ats/api/guides/webhooks/) for full details.
+
+## REST polling
+
+`GET /v1/transactions/{transaction_id}` (no auth — the UUID itself is the capability):
+
+```jsonc
+{
+  "id": "6f1c...",
+  "transaction_type": "register",        // or "add_version"
+  "current_step": "confirming",          // see step list below
+  "progress": 80,                        // 0..100
+  "description": "Waiting for block confirmation",
+  "is_complete": false,
+  "result": null,                        // populated on terminal step
+  "steps": [
+    { "step": "validating",            "progress":  5,  "description": "...", "timestamp": "..." },
+    { "step": "preparing_transaction", "progress": 20,  "description": "...", "timestamp": "..." },
+    { "step": "signing",               "progress": 40,  "description": "...", "timestamp": "..." },
+    { "step": "submitting",            "progress": 60,  "description": "...", "timestamp": "..." },
+    { "step": "confirming",            "progress": 80,  "description": "...", "timestamp": "..." }
+  ],
+  "created_at": "2026-04-30T11:00:00Z",
+  "updated_at": "2026-04-30T11:00:42Z"
+}
+```
+
+### Step values
+
+| Step                    | Progress | Meaning                                                                        |
+| ----------------------- | -------- | ------------------------------------------------------------------------------ |
+| `validating`            | 5%       | Initial input validation                                                       |
+| `preparing_transaction` | 20%      | Building the meta-transaction                                                  |
+| `signing`               | 40%      | Signing with the org wallet                                                    |
+| `submitting`            | 60%      | Submitted to the chain                                                         |
+| `confirming`            | 80%      | Waiting for block inclusion                                                    |
+| `completed`             | 100%     | Success, `result` populated with `tx_hash`, `ats_id`, `block_number`, `explorer_url` |
+| `failed`                | 100%     | Failure, `result.error` populated                                              |
+
+Recommended polling cadence: **every 2 seconds**, with backoff after 30 s. **Stop polling** once `is_complete` is `true`.
+
+## WebSocket
+
+`ws://<host>/v1/ws/transactions/{transaction_id}` (no auth — capability UUID).
+
+Frame types:
+
+```jsonc
+// Initial frame on connect
+{ "type": "connected", "transaction_id": "6f1c..." }
+
+// One per step transition
+{
+  "type": "update",
+  "step": "submitting",
+  "progress": 60,
+  "description": "Submitting to blockchain",
+  "timestamp": "2026-04-30T11:00:30Z"
+}
+
+// On error
+{
+  "type": "error",
+  "error": { "code": "...", "message": "...", "details": {…}, "request_id": "..." }
+}
+```
+
+The server closes the socket as soon as the transaction reaches `completed` or `failed`. There are no client-to-server frames — the channel is read-only.
+
+<Aside type="tip">
+Webhooks are durable across your downtime; WebSockets are not. If you can only pick one, pick webhooks.
+</Aside>

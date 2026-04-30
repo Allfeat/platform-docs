@@ -1,0 +1,22 @@
+---
+title: Idempotency
+description: How the Idempotency-Key header makes init and init-upload retry-safe — TTL, partitioning per API key, and which endpoints it applies to.
+---
+
+`init` and `init-upload` accept an optional `Idempotency-Key` header:
+
+```http
+Idempotency-Key: 4b9c7e1a-…   (any string ≤ 255 chars; we recommend a UUID v4)
+```
+
+## Behaviour
+
+- First call with a given `(api_key_id, idempotency_key)` runs normally and caches the response for **24 hours**.
+- Any retry within that 24h window with the same key returns the **exact same body** without doing the work again — same `job_id`, same `upload_url`.
+- Idempotency partitions per API key: the same key string used by two different API keys is two independent caches.
+- Cache only covers `init` / `init-upload`. `prepare` and `confirm` already have their own atomic semantics (single-use job IDs, atomic GETDEL on confirm), so they don't need an idempotency header.
+
+## When to set it
+
+- Always, in production, on `init` and `init-upload`. Network retries are cheap; double-uploads are not.
+- Generate one UUID per **logical user request**, not per HTTP request. Reissue the same value if you have to retry.

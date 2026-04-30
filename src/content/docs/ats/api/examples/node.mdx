@@ -1,0 +1,51 @@
+---
+title: Node.js — Full Registration
+description: End-to-end Node.js example walking through init, upload, prepare, and confirm with an Idempotency-Key.
+---
+
+```javascript
+const fetch = require("node-fetch");
+const fs    = require("node:fs");
+const crypto = require("node:crypto");
+
+const API   = process.env.AF_API;
+const TOKEN = process.env.AF_TOKEN;
+const ORG   = process.env.AF_ORG;
+
+async function registerWork(audioPath, title, creators, externalUserRef) {
+  const auth = { Authorization: `Bearer ${TOKEN}` };
+  const idempotencyKey = crypto.randomUUID();
+
+  // 1. init
+  const init = await (await fetch(`${API}/v1/organizations/${ORG}/works/init`, {
+    method: "POST",
+    headers: { ...auth, "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify({
+      network: "mainnet",
+      title,
+      filename: require("node:path").basename(audioPath),
+      creators,
+      external_user_ref: externalUserRef,
+    }),
+  })).json();
+
+  // 2. upload
+  await fetch(init.upload_url, { method: "PUT", body: fs.readFileSync(audioPath) });
+
+  // 3. prepare
+  const quote = await (await fetch(`${API}/v1/organizations/${ORG}/works/prepare`, {
+    method: "POST", headers: { ...auth, "Content-Type": "application/json" },
+    body: JSON.stringify({ job_id: init.job_id }),
+  })).json();
+  if (!quote.is_valid) throw new Error("Dry-run failed");
+  console.log(`Total: ${quote.total_price_credits} credits`);
+
+  // 4. confirm
+  const tx = await (await fetch(`${API}/v1/organizations/${ORG}/works/confirm`, {
+    method: "POST", headers: { ...auth, "Content-Type": "application/json" },
+    body: JSON.stringify({ job_id: init.job_id }),
+  })).json();
+
+  return tx.transaction_id;     // wait for the webhook
+}
+```

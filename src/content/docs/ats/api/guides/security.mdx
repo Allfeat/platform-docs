@@ -1,0 +1,16 @@
+---
+title: Security Checklist
+description: Production hardening checklist for Organization API integrations — secret storage, webhook verification, scope minimization, key rotation, and balance monitoring.
+---
+
+- [ ] Treat the bearer token as a production secret. Store it in a secrets manager, never in source control or container images.
+- [ ] Treat the webhook secret with the same care. It is the only thing proving a payload came from us.
+- [ ] Always verify the `X-Allfeat-Signature` header before trusting a webhook body. See [Verifying webhook signatures](/ats/api/guides/webhooks/#verifying-webhook-signatures).
+- [ ] Verify against the **raw bytes** of the body, not a re-serialized JSON object — frameworks reformat whitespace.
+- [ ] Reject webhooks where `|now - timestamp| > 300 s`.
+- [ ] Pin scopes to the minimum the integration needs (don't grant `works:update` if you only register).
+- [ ] Use one key per environment (staging / prod) and per logical workload.
+- [ ] Rotate keys on personnel changes — there is no per-user audit trail beyond `created_by_user_id`, so rotating is the simplest way to scope out access.
+- [ ] Send `Idempotency-Key` on every retry-prone call (`init`, `init-upload`).
+- [ ] Persist `transaction_id` ↔ `external_user_ref` yourself; we don't provide an inverse-lookup endpoint.
+- [ ] Watch your organization's credit balance — confirms hard-fail when empty. Set up a low-balance alert.

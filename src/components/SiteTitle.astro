@@ -1,0 +1,37 @@
+---
+import logo from "../assets/allfeat-logo.svg";
+import { Image } from "astro:assets";
+---
+
+<a href="/" class="af-brand" aria-label="Allfeat Docs home">
+  <Image src={logo} alt="Allfeat" class="af-brand__mark" loading="eager" />
+  <span class="af-brand__suffix">Docs</span>
+</a>
+
+<style>
+  .af-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--af-ink);
+    text-decoration: none;
+    line-height: 1;
+  }
+  .af-brand__mark {
+    display: block;
+    height: 22px;
+    width: auto;
+  }
+  :root[data-theme="dark"] .af-brand__mark {
+    filter: invert(1);
+  }
+  .af-brand__suffix {
+    font-family: var(--af-font-display);
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--af-ink-dim);
+    letter-spacing: -0.01em;
+    padding-left: 10px;
+    border-left: 1px solid var(--af-line-2);
+  }
+</style>

@@ -1,0 +1,109 @@
+---
+title: Error Handling
+description: Handle ATS Widget errors gracefully — structured error events, error codes, built-in retry behavior, and recovery patterns.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The widget handles most errors internally and displays user-friendly messages. For deeper control, listen to the error events and react accordingly.
+
+## Error Events
+
+### `allfeat:failed` — Critical Errors
+
+Emitted when the operation cannot continue. The widget shows an error screen (FAILED or DISABLED).
+
+```javascript
+widget.addEventListener('allfeat:failed', (e) => {
+  const { code, message, requestId, details } = e.detail;
+
+  console.error(`[${code}] ${message} (${requestId})`);
+
+  // Example: redirect on configuration error
+  if (code === 'session.origin_not_allowed') {
+    showMessage('This website is not authorized to use the widget.');
+  }
+});
+```
+
+### `allfeat:error` — Non-Fatal Errors
+
+Emitted for recoverable errors. The widget continues operating.
+
+```javascript
+widget.addEventListener('allfeat:error', (e) => {
+  const { code, message, requestId, stage } = e.detail;
+
+  sendToMonitoring({
+    code,
+    message,
+    requestId,
+    stage,
+  });
+});
+```
+
+### `allfeat:token-expired` — Authentication Errors
+
+See [Authentication](/ats/widget/guides/authentication/#automatic-token-renewal) for the full token refresh flow.
+
+## Error Categories
+
+| Category | Example Codes | Widget Behavior |
+|----------|---------------|----------------|
+| **Auth / Session** | `session.invalid_token`, `common.auth.expired` | Triggers token refresh flow |
+| **Configuration** | `session.key_inactive`, `session.origin_not_allowed`, `organization.inactive` | DISABLED screen (no retry button) |
+| **Service Unavailable** | `common.service_unavailable`, `transaction.store_unavailable` | FAILED screen with retry |
+| **Rate Limited** | `common.rate_limited`, `session.rate_limited` | FAILED screen with message |
+| **Other API Errors** | `registration.duplicate_title`, `work.not_found` | FAILED screen with localized message |
+| **Client Errors** | `widget.network_error`, `widget.upload_error` | FAILED screen, no request ID |
+
+<Aside type="note">
+See the full [Error Codes Reference](/ats/widget/reference/error-codes/) for every error code, its user-facing message, and recommended integrator action.
+</Aside>
+
+## Request ID
+
+Every API error includes a `request_id` (e.g., `req_01HXYZ8G7K3M9Q2F4N5P6R7S8T`). This ID is:
+- Shown on terminal screens (FAILED, DISABLED) with a copy button
+- Included in `allfeat:failed` and `allfeat:error` event payloads as `requestId`
+- Useful for support tickets — it correlates to server-side logs
+
+Client-side errors (`widget.*` codes) do not have a request ID.
+
+## Retry Behavior
+
+| Scenario | Behavior |
+|----------|----------|
+| **File upload** | 3 total attempts (2 retries) with exponential backoff (1s, 2s) |
+| **Token expiry** | Pauses and waits for a new token (60-second timeout) |
+| **Rate limiting (429)** | Up to 2 retries with backoff (1s, 2s, or `Retry-After` header) |
+| **Transaction polling** | Polls every 3s with a 120-second timeout |
+| **Configuration errors** | Not retryable — DISABLED screen without retry button |
+| **Network errors** | Displayed to the user with a FAILED screen (retry button) |
+
+## Resetting After an Error
+
+Call `widget.reset()` to clear the error state and return to the form:
+
+```javascript
+widget.addEventListener('allfeat:failed', (e) => {
+  retryButton.onclick = () => widget.reset();
+});
+```
+
+## Getting the Current State
+
+Use `getState()` to inspect the widget's current state for debugging:
+
+```javascript
+const state = widget.getState();
+console.log(state);
+// {
+//   screen: 'FAILED',
+//   jobId: '...',
+//   transactionId: '...',
+//   atsId: null,
+//   accessCode: undefined
+// }
+```
