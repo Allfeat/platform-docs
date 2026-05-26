@@ -10,6 +10,7 @@ Error codes appear in the `code` field of `allfeat:failed` and `allfeat:error` e
 | Code | Message | Recommended Action |
 |------|---------|-------------------|
 | `session.invalid_token` | Your session has expired. Please refresh your credentials. | Handled automatically via `allfeat:token-expired` |
+| `session.invalid_external_user_ref` | The `external_user_ref` is empty or exceeds 255 bytes. | Fix the value before minting the session |
 | `session.key_inactive` | This widget is currently disabled. | Contact administrator — shown on DISABLED screen |
 | `session.widget_not_enabled` | The widget feature is not enabled for your organization. | Contact administrator |
 | `session.origin_not_allowed` | This website is not authorized to use the widget. | Verify domain is in the allowed origins list |
@@ -51,7 +52,8 @@ These errors show the **DISABLED** screen (no retry button):
 | `work.not_found` | Work not found. | Verify work ID |
 | `work.already_registered` | Work already registered. | — |
 | `access_code.not_found` | Access code invalid or doesn't exist. | Verify access code |
-| `access_code.expired` | Access code expired. | — |
+| `access_code.format_invalid` | Access code malformed (must start with `atc_`). | Check the code on the user's side |
+| `common.forbidden` | Cross-user mutation rejected — the work belongs to a different `external_user_ref`. | Verify the end-user owns the targeted work before calling `versions/init` |
 
 ## Transaction
 

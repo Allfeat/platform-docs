@@ -1,0 +1,257 @@
+---
+title: Tracking Your Own End-Users
+description: Pin every widget session to one of your own user identifiers so registrations, updates and downloads are scoped to that end-user — without exposing per-work access codes.
+---
+
+import { Aside, Card, CardGrid, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+By default, the widget hands an **access code** back to the end-user on every successful registration, and the user is expected to bring it back later to update or read their work. That model is intentional: it works even when your platform has no user accounts of its own.
+
+If your platform **does** have its own user accounts, you can do better. The widget supports a second mode where every session is pinned to a stable identifier of *your* choosing — your internal user UUID, an artist ID in your CRM, a member number, anything. The platform tags each registration with that identifier and uses it to scope every subsequent listing, update or download made under the same identifier.
+
+<Aside type="tip">
+**Either model is fine.** The unified-route surface is the same on the server side; only the JWT claim and one widget attribute differ. Pick the approach that fits how your platform thinks about users.
+</Aside>
+
+## Access codes vs. external user references
+
+|                                       | Access code (default)                          | `external_user_ref`                                                  |
+|---------------------------------------|------------------------------------------------|----------------------------------------------------------------------|
+| Where the identifier lives            | Returned per work, **end-user holds it**       | Pinned on the JWT, **your backend holds it**                         |
+| What the end-user has to remember     | A 68-char code per work                        | Nothing — they log in to your platform                               |
+| Update flow                           | User types the access code                     | User picks a work from your work-selector UI                         |
+| Reading the user's catalog            | One-by-one via each access code                | Built-in list view, scoped server-side                               |
+| Suits platforms without accounts      | ✅                                              | ❌ (you need a way to identify your users)                            |
+| Suits platforms with their own logins | ✅                                              | ✅ (recommended)                                                      |
+| Webhook payload                       | `access_code` present                          | `access_code` is `null`, `external_user_ref` echoed back             |
+
+## The two moving parts
+
+Switching the widget into ref-scoped mode is two changes:
+
+1. **Backend mint** — add an `external_user_ref` field on the body sent to `POST /v1/sessions`.
+2. **Widget attribute** — set `external-user-id="<same ref>"` on the `<ats-widget>` element.
+
+Both values are the same string. The JWT claim is the authoritative copy — the widget attribute only drives the UI (it tells the widget to render the work-selector and the catalog view).
+
+<Aside type="caution">
+The widget attribute is **not** secret — it ends up in the DOM. What's *secret* is the `secret_key` your backend uses to mint the JWT. The `external_user_ref` itself is opaque to the platform; treat it as a non-sensitive identifier (don't put PII in it — emails, real names, etc. should not be the ref).
+</Aside>
+
+## Setup
+
+<Steps>
+
+1. ### Mint a session pinned to your user
+
+   Your backend already calls `POST /v1/sessions` to mint widget JWTs (see [Authentication](/ats/widget/guides/authentication/)). Add `external_user_ref` to the body — that's all.
+
+   <Tabs>
+     <TabItem label="Node.js">
+       ```typescript title="backend/routes/ats-token.ts"
+       app.post('/api/ats-token', async (req, res) => {
+         const user = await getAuthenticatedUser(req);
+         if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+         const response = await fetch('https://organizations.api.allfeat.org/v1/sessions', {
+           method: 'POST',
+           headers: {
+             'Content-Type': 'application/json',
+             'Origin': 'https://yoursite.com',
+           },
+           body: JSON.stringify({
+             secret_key: process.env.ALLFEAT_SECRET_KEY,
+             // Pick the action type that matches the widget mode you're rendering:
+             //   register      → mode="register"
+             //   update_version → mode="update"
+             //   access        → mode="download"
+             action_type: req.body.action_type,
+             allowed_network: 'testnet',
+             external_user_ref: user.id,   // ← your internal identifier
+           }),
+         });
+
+         const { token } = await response.json();
+         res.json({ token });
+       });
+       ```
+     </TabItem>
+     <TabItem label="cURL">
+       ```bash
+       curl -X POST https://organizations.api.allfeat.org/v1/sessions \
+         -H "Content-Type: application/json" \
+         -H "Origin: https://yoursite.com" \
+         -d '{
+           "secret_key": "csk_your_secret_key",
+           "action_type": "register",
+           "allowed_network": "testnet",
+           "external_user_ref": "user_42"
+         }'
+       ```
+     </TabItem>
+   </Tabs>
+
+2. ### Drop the ref on the widget
+
+   ```html
+   <ats-widget
+     site-key="cpk_your_public_key"
+     ats-url="https://ats.api.allfeat.org"
+     network="testnet"
+     mode="register"
+     external-user-id="user_42"
+   ></ats-widget>
+   ```
+
+   The same `external-user-id` value powers `mode="register"`, `mode="update"`, and `mode="download"` — set it once when you render the widget and let the user switch modes.
+
+3. ### Mint a fresh token on every mode change
+
+   Each token narrows to one `action_type`. When the user switches from registering to updating, mint a new token with the matching action type (and the same `external_user_ref`).
+
+   ```javascript
+   async function switchMode(newMode) {
+     widget.setAttribute('mode', newMode);
+     const { token } = await fetch('/api/ats-token', {
+       method: 'POST',
+       body: JSON.stringify({
+         action_type:
+           newMode === 'register' ? 'register' :
+           newMode === 'update'   ? 'update_version' :
+                                    'access',
+       }),
+       headers: { 'Content-Type': 'application/json' },
+     }).then(r => r.json());
+     widget.setToken(token);
+   }
+   ```
+
+</Steps>
+
+## What changes in each mode
+
+### Register mode
+
+The widget hits the same `/v1/works/init|prepare|confirm` endpoints as the default flow — only the server's side effect changes:
+
+- The new work is tagged with `external_user_ref = "user_42"`.
+- **No access code is generated.** The widget's success screen reflects this: the access-code panel is hidden.
+
+```javascript
+widget.addEventListener('allfeat:complete', (e) => {
+  console.log(e.detail.atsId);       // 1024
+  console.log(e.detail.txHash);      // 0xabc…
+  console.log(e.detail.accessCode);  // undefined — by design in this mode
+});
+```
+
+### Update mode
+
+Instead of an access-code text field, the widget renders a **work-selector**: a paginated list of all works tagged with the current `external_user_ref`. The user picks one, the form pre-fills from its latest version, and they push a new version on chain.
+
+The wizard sub-steps in this mode:
+
+| Sub-step      | Description                                                                |
+|---------------|----------------------------------------------------------------------------|
+| `work_select` | Paginated work list filtered to this end-user, with search                 |
+| `file`        | Optional new asset file (skip to reuse the existing one)                   |
+| `title`       | Pre-filled, read-only                                                      |
+| `creators`    | Pre-filled from the latest version, editable                               |
+| `review`      | Summary before submit                                                      |
+
+### Download mode
+
+A new mode, available only when `external-user-id` is set. It renders the end-user's catalog as a list view. The user can drill into any work to:
+
+- See the version history (oldest → newest).
+- Download each version's **audio asset** as a presigned S3 URL.
+- Download each version's **certificate PDF**.
+- Expand the creators credited on each version.
+
+```html
+<ats-widget
+  site-key="cpk_..."
+  ats-url="https://ats.api.allfeat.org"
+  network="testnet"
+  mode="download"
+  external-user-id="user_42"
+></ats-widget>
+```
+
+Use `action_type: "access"` when minting the JWT for download mode.
+
+## Picking a good `external_user_ref`
+
+The platform treats the value as opaque — there is no validation beyond a non-empty, ≤ 255-byte check. A few rules of thumb:
+
+- **Stable.** Once a work is tagged, the ref is **immutable**. If you re-issue user IDs on signup churn, future sessions will see an empty catalog for the new ID.
+- **Unique inside your organization.** Two users with the same ref will see each other's works. Use a primary key (UUID, integer ID) from your DB.
+- **Opaque, not personal.** Don't put emails, names, or anything that wouldn't be safe in a debug log. Internal IDs are perfect.
+- **Within 255 bytes.** The DB column is `VARCHAR(255)`.
+
+You stay in full control of the mapping. The platform never resolves a ref back to a human — your dashboard does.
+
+## Storing on your side
+
+You don't have to store anything to make this work — the widget loads the user's catalog by ref. But if you want richer dashboards on your platform you can keep a per-work mapping; it's especially useful for joining against your own metadata:
+
+```
+Your Database
+┌──────────┬────────┬─────────────────────┬────────────┐
+│ user_id  │ ats_id │ tx_hash             │ created_at │
+├──────────┼────────┼─────────────────────┼────────────┤
+│ user_42  │ 1024   │ 0xabc…              │ 2026-05-01 │
+│ user_42  │ 1037   │ 0xdef…              │ 2026-05-15 │
+└──────────┴────────┴─────────────────────┴────────────┘
+```
+
+You get the `atsId` and `txHash` on the `allfeat:complete` event of each registration. The `user_id` here is the same as the `external_user_ref` you pinned at mint time.
+
+## Token lifecycle reminder
+
+The JWT is still ~5 min, single-use for write actions, scoped to a single `action_type`. The `external_user_ref` is just one more claim baked into it — minting works exactly the same:
+
+```javascript
+widget.addEventListener('allfeat:token-expired', async (e) => {
+  const { token } = await fetch('/api/ats-token', {
+    method: 'POST',
+    body: JSON.stringify({ action_type: e.detail.pendingAction === 'download'
+      ? 'access'
+      : e.detail.pendingAction === 'submit' && widget.getAttribute('mode') === 'update'
+        ? 'update_version'
+        : 'register' }),
+    headers: { 'Content-Type': 'application/json' },
+  }).then(r => r.json());
+  widget.setToken(token);
+});
+```
+
+## Server-side guard rails
+
+Two server-side checks keep things tight, both invisible to the widget:
+
+- A widget session with `external_user_ref = "user_42"` **cannot** read or mutate a work tagged with `"user_43"`, even within the same organization. Cross-user requests return `404` on reads, `403` on version-update writes.
+- Refless widget sessions are **rejected** on the listing / read / version-update surface. They can only use the access-code flow. (Mixing the two for the same end-user is fine; just choose one model per session.)
+
+## Migrating from access codes
+
+You can run both models in parallel forever — there's no flag day. Works registered before you adopt `external_user_ref` keep their access code; works registered after carry the ref instead. Your end-users see whichever path the work happens to have been created under.
+
+If you want to backfill the ref on legacy works, there's no API for that today — write a one-off DB migration on your side, or contact the Allfeat team if you need a bulk operation.
+
+## See also
+
+<CardGrid>
+  <Card title="External user references (API)" icon="document">
+    The companion guide for the B2B API key flow, where the ref travels on each HTTP body instead of a JWT claim.
+    [Read →](/ats/api/guides/external-user-ref/)
+  </Card>
+  <Card title="Update mode" icon="pen">
+    Reference for the update wizard sub-steps and behavior.
+    [Read →](/ats/widget/guides/update-mode/)
+  </Card>
+  <Card title="Attributes & methods" icon="seti:html">
+    The full list of widget attributes including `external-user-id`.
+    [Read →](/ats/widget/reference/attributes/)
+  </Card>
+</CardGrid>

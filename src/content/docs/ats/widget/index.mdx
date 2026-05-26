@@ -38,19 +38,19 @@ This means:
 The integration involves three actors:
 
 ```
-┌─────────────────┐     JWT Token      ┌─────────────────┐
-│  Your Backend    │◄──────────────────►│   Allfeat API    │
-│  (secret_key)    │  POST /v1/sessions │  ats.api.        │
-│                  │                    │  allfeat.org     │
-└────────┬────────┘                    └────────┬────────┘
-         │ token                                │
-         ▼                                      │
-┌─────────────────┐                             │
-│  Your Frontend   │                             │
-│  <ats-widget     │  Upload + API calls         │
-│   site-key="…">  │────────────────────────────►│
-│                  │                             │
-└─────────────────┘                             │
+┌─────────────────┐     JWT Token      ┌──────────────────────┐
+│  Your Backend    │◄──────────────────►│  organizations.api.  │
+│  (secret_key)    │  POST /v1/sessions │  allfeat.org         │
+│                  │                    │                      │
+└────────┬────────┘                    └──────────────────────┘
+         │ token
+         ▼
+┌─────────────────┐                    ┌──────────────────────┐
+│  Your Frontend   │  Upload + API     │  ats.api.allfeat.org │
+│  <ats-widget     │  calls            │                      │
+│   site-key="…">  │──────────────────►│                      │
+│                  │                   │                      │
+└─────────────────┘                    └──────────────────────┘
 ```
 
 1. **Your frontend** includes the widget with your `site-key` attribute (public key)

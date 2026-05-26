@@ -30,7 +30,7 @@ Fired once when the widget is mounted and initialized.
 
 ```typescript
 interface ReadyDetail {
-  mode: 'register' | 'update';
+  mode: 'register' | 'update' | 'download';
 }
 ```
 
@@ -99,32 +99,17 @@ interface StepDetail {
 }
 ```
 
-**Register mode — step order and progress:**
+**Step order and progress (register and update share the same sequence):**
 
 | Step | Progress | Description |
 |------|----------|-------------|
 | `validating` | 5% | Validating work data |
-| `transferring_tokens` | 20% | Transferring tokens |
-| `preparing_transaction` | 40% | Preparing transaction |
-| `signing` | 55% | Signing transaction |
-| `submitting` | 70% | Submitting to blockchain |
-| `confirming` | 85% | Waiting for confirmation |
+| `preparing_transaction` | 20% | Preparing transaction |
+| `signing` | 40% | Signing transaction |
+| `submitting` | 60% | Submitting to blockchain |
+| `confirming` | 80% | Waiting for confirmation |
 | `completed` | 100% | Done |
-
-**Update mode — step order and progress:**
-
-| Step | Progress | Description |
-|------|----------|-------------|
-| `validating` | 5% | Validating work data |
-| `preparing_transaction` | 40% | Preparing transaction |
-| `signing` | 55% | Signing transaction |
-| `submitting` | 70% | Submitting to blockchain |
-| `confirming` | 85% | Waiting for confirmation |
-| `completed` | 100% | Done |
-
-<Aside type="note">
-The `transferring_tokens` step is only present in **register** mode. Update mode skips directly from `validating` to `preparing_transaction`.
-</Aside>
+| `failed` | 100% | Terminal failure |
 
 ---
 

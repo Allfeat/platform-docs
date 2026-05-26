@@ -43,7 +43,7 @@ Token expiry can occur at any point:
 Emitted when the widget is initialized and ready.
 
 ```typescript
-{ mode: 'register' | 'update' | 'access' }
+{ mode: 'register' | 'update' | 'download' }
 ```
 
 ### `allfeat:upload-start`
@@ -85,17 +85,16 @@ Emitted on each blockchain tracking step change.
 
 ```typescript
 {
-  step: 'validating' | 'transferring_tokens'
-      | 'preparing_transaction' | 'signing'
-      | 'submitting' | 'confirming';
+  step: 'validating'              // progress 5
+      | 'preparing_transaction'   // progress 20
+      | 'signing'                 // progress 40
+      | 'submitting'              // progress 60
+      | 'confirming'              // progress 80
+      | 'completed' | 'failed';   // progress 100
   progress: number;       // 0–100
   description?: string;
 }
 ```
-
-<Aside type="note">
-The `transferring_tokens` step only occurs in **register** mode. In **update** mode, the flow goes directly from `validating` to `preparing_transaction`.
-</Aside>
 
 ### `allfeat:complete`
 

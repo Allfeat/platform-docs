@@ -14,8 +14,9 @@ Set these directly on the `<ats-widget>` element.
 | `site-key` | `string` | Yes | — | Your organization's public key (`cpk_...`) |
 | `ats-url` | `string` | Yes | — | Base URL of the ATS API (`https://ats.api.allfeat.org`) |
 | `network` | `"testnet" \| "mainnet"` | No | `"testnet"` | Blockchain network to use |
-| `mode` | `"register" \| "update"` | No | `"register"` | Operation mode |
+| `mode` | `"register" \| "update" \| "download"` | No | `"register"` | Operation mode. `"download"` is only valid when `external-user-id` is set. |
 | `token` | `string` | No | — | JWT token (prefer `setToken()` instead — see [Authentication](/ats/widget/guides/authentication/)) |
+| `external-user-id` | `string` | No | — | One of your own end-user identifiers. When set, the widget switches into ref-scoped mode: update renders a work-selector, download mode becomes available, registrations skip the access code. Must match the `external_user_ref` claim on the JWT. See [Tracking your own end-users](/ats/widget/guides/your-own-users/). |
 | `max-file-size` | `number` | No | — | Maximum file size in bytes. When set, the widget uses the lower value between this and the API-provided limit. Useful for organizations that want to enforce a stricter file size limit. |
 
 ### Example
@@ -43,7 +44,8 @@ Read-only accessors that reflect the current attribute values.
 | `atsUrl` | `string` | Current `ats-url` value |
 | `token` | `string` | Current token value |
 | `network` | `'testnet' \| 'mainnet'` | Current network |
-| `mode` | `'register' \| 'update'` | Current operation mode |
+| `mode` | `'register' \| 'update' \| 'download'` | Current operation mode |
+| `externalUserId` | `string \| null` | Current `external-user-id` value, `null` when unset |
 | `maxFileSize` | `number` | Maximum file size in bytes (fetched from API at startup) |
 
 ## Methods
@@ -88,7 +90,7 @@ const state = widget.getState();
 
 ## Observed Attributes
 
-The widget reacts to changes on these attributes: `site-key`, `token`, `ats-url`, `network`, `mode`, `max-file-size`.
+The widget reacts to changes on these attributes: `site-key`, `token`, `ats-url`, `network`, `mode`, `max-file-size`, `external-user-id`.
 
 You can update attributes dynamically:
 
@@ -180,7 +182,7 @@ import type {
   CompletionData,        // Post-registration data
   AccessData,            // Work details fetched in access mode
   Screen,                // 'FORM' | 'UPLOAD' | 'CONFIRMING' | 'TRACKING' | 'COMPLETE' | 'FAILED'
-  Mode,                  // 'register' | 'update'
+  Mode,                  // 'register' | 'update' | 'download'
   Network,               // 'testnet' | 'mainnet'
   // Event detail types
   ReadyDetail,

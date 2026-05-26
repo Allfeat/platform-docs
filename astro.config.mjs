@@ -42,6 +42,7 @@ export default defineConfig({
                 { label: "Events & Callbacks", slug: "ats/widget/guides/events" },
                 { label: "Styling & Theming", slug: "ats/widget/guides/styling" },
                 { label: "Update Mode", slug: "ats/widget/guides/update-mode" },
+                { label: "Tracking Your Own End-Users", slug: "ats/widget/guides/your-own-users" },
                 { label: "Pricing & Credits", slug: "ats/widget/guides/pricing" },
                 { label: "Error Handling", slug: "ats/widget/guides/error-handling" },
               ],

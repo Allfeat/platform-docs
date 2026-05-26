@@ -110,9 +110,11 @@ User → Your Frontend → Your Backend → Allfeat API
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `secret_key` | string | Yes | Your organization's secret key (`csk_...`) |
-| `action_type` | string | Yes | `"register"` or `"update_version"` |
+| `action_type` | string | Yes | `"register"`, `"update_version"`, or `"access"` |
 | `allowed_network` | string | Yes | `"testnet"` or `"mainnet"` |
 | `allowed_ats_id` | number | No | Restricts the token to a specific ATS work ID |
+| `external_user_ref` | string | No | Your end-user's identifier (1–255 bytes). When set, the work is tagged with this ref and subsequent reads/updates require the same value. **No access code is generated.** See [Tracking your own end-users](/ats/widget/guides/your-own-users/). |
+| `max_file_size_bytes` | integer | No | Per-session override of the org-level audio size cap (must be > 0). |
 
 ### Required Headers
 
@@ -127,6 +129,11 @@ User → Your Frontend → Your Backend → Allfeat API
 |--------|-------|-------------|
 | `register` | `mode="register"` | Create a new ATS work |
 | `update_version` | `mode="update"` | Register a new version of an existing work |
+| `access` | `mode="download"` | Read-only access to a specific end-user's works (download mode). Requires `external_user_ref`. |
+
+<Aside type="note" title="Action type ↔ widget mode">
+The JWT's `action_type` and the widget's `mode` HTML attribute live in two distinct namespaces. The mapping is `register ↔ register`, `update_version ↔ update`, `access ↔ download`.
+</Aside>
 
 ## One-Time-Use Tokens
 

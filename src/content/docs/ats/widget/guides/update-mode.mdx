@@ -11,6 +11,10 @@ Update mode lets your end users register a **new version** of a work already reg
 - **Contributors have changed** — new creators joined or existing ones were removed
 - The **metadata needs updating** (roles, identifiers like IPI/ISNI)
 
+<Aside type="tip">
+This page describes the **access-code path**: the user types in a code they received when the work was first registered. If your platform has its own user accounts, the [end-user reference path](/ats/widget/guides/your-own-users/) is usually a better fit — the widget renders a work-selector list instead of an access-code field.
+</Aside>
+
 ## How It Works
 
 In update mode, the work is identified by its **access code** — the unique 68-character string (`atc_...`) returned when the work was first registered. The user enters the access code in the widget, which verifies it against the API and pre-fills the form with the existing work's metadata.
