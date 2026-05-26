@@ -8,13 +8,17 @@ import { Aside } from '@astrojs/starlight/components';
 Registration is a **3-step flow** designed so your backend never holds binary audio in flight, and so you can show a price quote to the user before charging:
 
 ```
-POST  /v1/organizations/{org}/works/init      ─►  presigned upload URL
-PUT   <upload_url> (audio bytes)               ─►  S3
-POST  /v1/organizations/{org}/works/prepare   ─►  hash + price quote
-POST  /v1/organizations/{org}/works/confirm   ─►  on-chain submission
+POST  /v1/works/init      ─►  presigned upload URL
+PUT   <upload_url> (audio bytes)  ─►  S3
+POST  /v1/works/prepare   ─►  hash + price quote
+POST  /v1/works/confirm   ─►  on-chain submission
 ```
 
-## `POST /v1/organizations/{organization_id}/works/init`
+<Aside type="note">
+All endpoints share the same `/v1/works/...` surface used by the widget and the direct-user flow. The API key resolves the organization server-side — there is no `{organization_id}` segment in the URL. Pass `external_user_ref` on the body when the request comes from a specific end-user; see [External User References](/ats/api/guides/external-user-ref/).
+</Aside>
+
+## `POST /v1/works/init`
 
 **Scope:** `works:register`
 
@@ -80,7 +84,7 @@ curl -X PUT --upload-file ./track.wav "$UPLOAD_URL"
 
 No `Authorization` header — the URL itself is the credential.
 
-## `POST /v1/organizations/{organization_id}/works/prepare`
+## `POST /v1/works/prepare`
 
 **Scope:** `works:register`
 
@@ -119,7 +123,7 @@ This is the moment to display the quote to your user and ask them to confirm. Af
 
 `401`, `403`, `404` (`registration.upload_session_not_found` when `job_id` is unknown or expired), `413` (asset file too large), `422` (`registration.dry_run_failed`).
 
-## `POST /v1/organizations/{organization_id}/works/confirm`
+## `POST /v1/works/confirm`
 
 **Scope:** `works:register`
 

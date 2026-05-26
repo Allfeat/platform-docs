@@ -10,14 +10,13 @@ const crypto = require("node:crypto");
 
 const API   = process.env.AF_API;
 const TOKEN = process.env.AF_TOKEN;
-const ORG   = process.env.AF_ORG;
 
 async function registerWork(audioPath, title, creators, externalUserRef) {
   const auth = { Authorization: `Bearer ${TOKEN}` };
   const idempotencyKey = crypto.randomUUID();
 
   // 1. init
-  const init = await (await fetch(`${API}/v1/organizations/${ORG}/works/init`, {
+  const init = await (await fetch(`${API}/v1/works/init`, {
     method: "POST",
     headers: { ...auth, "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
     body: JSON.stringify({
@@ -33,7 +32,7 @@ async function registerWork(audioPath, title, creators, externalUserRef) {
   await fetch(init.upload_url, { method: "PUT", body: fs.readFileSync(audioPath) });
 
   // 3. prepare
-  const quote = await (await fetch(`${API}/v1/organizations/${ORG}/works/prepare`, {
+  const quote = await (await fetch(`${API}/v1/works/prepare`, {
     method: "POST", headers: { ...auth, "Content-Type": "application/json" },
     body: JSON.stringify({ job_id: init.job_id }),
   })).json();
@@ -41,7 +40,7 @@ async function registerWork(audioPath, title, creators, externalUserRef) {
   console.log(`Total: ${quote.total_price_credits} credits`);
 
   // 4. confirm
-  const tx = await (await fetch(`${API}/v1/organizations/${ORG}/works/confirm`, {
+  const tx = await (await fetch(`${API}/v1/works/confirm`, {
     method: "POST", headers: { ...auth, "Content-Type": "application/json" },
     body: JSON.stringify({ job_id: init.job_id }),
   })).json();

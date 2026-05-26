@@ -39,17 +39,17 @@ You never handle private keys, gas, or chain RPC.
                 Bearer token │                    │ Signed webhook
                              ▼                    │
        ┌──────────────────────────────────────────┴─────────┐
-       │   POST /v1/organizations/{org}/works/init          │
+       │   POST /v1/works/init                              │
        │   PUT  <upload_url>  (presigned S3, audio bytes)   │
-       │   POST /v1/organizations/{org}/works/prepare       │
-       │   POST /v1/organizations/{org}/works/confirm       │
+       │   POST /v1/works/prepare                           │
+       │   POST /v1/works/confirm                           │
        └─────────────────────────┬─────────────────────────┘
                                  │ async chain submission
                                  ▼
                           Allfeat blockchain
 ```
 
-You make 3 to 4 HTTP calls per registration. Everything else (signing, chain submission, indexing, fee debit, webhook delivery) happens server-side.
+You make 3 to 4 HTTP calls per registration. Everything else (signing, chain submission, indexing, fee debit, webhook delivery) happens server-side. The API key resolves the owning organization automatically — there is no `{organization_id}` segment in the URL.
 
 ## Quick start (5 minutes)
 
@@ -79,13 +79,14 @@ Set up your environment:
 ```bash
 export AF_API="https://ats.api.allfeat.org"
 export AF_TOKEN="afo_sk_live_…"          # the token from step 1
-export AF_ORG="00000000-0000-0000-0000-000000000000"   # your organization UUID
 ```
+
+The owning organization is resolved automatically from the API key — no org UUID in the URL.
 
 #### a) Init — get a presigned upload URL
 
 ```bash
-curl -sS -X POST "$AF_API/v1/organizations/$AF_ORG/works/init" \
+curl -sS -X POST "$AF_API/v1/works/init" \
   -H "Authorization: Bearer $AF_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{
@@ -97,7 +98,7 @@ curl -sS -X POST "$AF_API/v1/organizations/$AF_ORG/works/init" \
       "email": "alice@example.com",
       "roles": { "author": true, "composer": true, "arranger": false, "adapter": false }
     }],
-    "external_user_ref": "user-42"
+    "external_user_ref": "user_42"
   }'
 ```
 
@@ -120,7 +121,7 @@ curl -sS -X PUT --upload-file ./track.wav "<upload_url from step a>"
 #### c) Prepare — get the price estimate
 
 ```bash
-curl -sS -X POST "$AF_API/v1/organizations/$AF_ORG/works/prepare" \
+curl -sS -X POST "$AF_API/v1/works/prepare" \
   -H "Authorization: Bearer $AF_TOKEN" \
   -H 'Content-Type: application/json' \
   -d "{\"job_id\":\"8a3f…\"}"
@@ -147,7 +148,7 @@ The job is now reserved with the quoted price. You have ~5 minutes to confirm (t
 #### d) Confirm — submit to the blockchain
 
 ```bash
-curl -sS -X POST "$AF_API/v1/organizations/$AF_ORG/works/confirm" \
+curl -sS -X POST "$AF_API/v1/works/confirm" \
   -H "Authorization: Bearer $AF_TOKEN" \
   -H 'Content-Type: application/json' \
   -d "{\"job_id\":\"8a3f…\"}"
@@ -180,7 +181,7 @@ X-Allfeat-Timestamp: 1714478345
   "transaction_id": "6f1c…",
   "organization_id": "…",
   "api_key_id": "…",
-  "external_user_ref": "user-42",
+  "external_user_ref": "user_42",
   "network": "testnet",
   "ats_id": 1024,
   "tx_hash": "0xabc…",

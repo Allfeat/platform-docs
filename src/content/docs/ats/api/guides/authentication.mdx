@@ -21,7 +21,7 @@ The first 12 characters (`afo_sk_live_`) are stored in plaintext for display in 
 
 ## Where the key applies
 
-A key is bound to **exactly one organization**. The path you call must include the matching `{organization_id}`; mismatches return `403`. This is enforced **before** any handler logic runs, so a leaked key cannot be used against a different organization even if the URL is wrong.
+A key is bound to **exactly one organization**, resolved server-side from the bearer token. There is no `{organization_id}` in the URL — your API key alone scopes you to your organization. A leaked key cannot be used against a different organization; the resolution happens before any handler logic runs.
 
 ## What the key cannot do
 

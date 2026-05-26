@@ -25,7 +25,6 @@ Switch on `code`, never on `message` (messages may change; codes are stable). Al
 | 401  | `api_key.invalid_format`   | Bearer doesn't start with `afo_sk_live_`                                         |
 | 401  | `api_key.not_found`        | Token is unknown — wrong, leaked & rotated, or for the wrong environment         |
 | 401  | `api_key.revoked`          | Key was revoked (`revoked_at` set)                                               |
-| 403  | `api_key.org_mismatch`     | The key belongs to a different organization than the one in the URL             |
 | 403  | `api_key.scope_denied`     | Key is missing the scope this route requires (`details.required` tells you which) |
 | 403  | `api_key.org_inactive`     | The organization is soft-deleted or `is_active=false`                            |
 
@@ -61,7 +60,7 @@ Switch on `code`, never on `message` (messages may change; codes are stable). Al
 | ---- | ----------------------------- | ----------------------------------------------------------------------------------------- |
 | 400  | `common.bad_request`          | Generic input rejection (e.g. malformed `Idempotency-Key`)                                |
 | 401  | `common.unauthorized`         | No credential in the request                                                              |
-| 403  | `common.forbidden`            | Generic deny — typically insufficient credits, see `details`                              |
+| 403  | `common.forbidden`            | Generic deny — typically insufficient credits, or an `external_user_ref` mismatch on a version update (the work was tagged with a different ref at register time). See `details`. |
 | 404  | `common.not_found`            | Generic not-found — resource named in `details.resource`                                  |
 | 422  | `common.validation_failed`    | Field-level validation failures — `details.fields`                                        |
 | 429  | `common.quota_exceeded`       | Freemium quota reached — `details.limit`, `details.used`, `details.resets_at`             |

@@ -9,14 +9,18 @@ Every work can be updated with a new **version** — corrected metadata, an upda
 
 There are two entry points depending on whether you keep the original asset:
 
-| Endpoint                                                          | When to use                                                  |
-| ----------------------------------------------------------------- | ------------------------------------------------------------ |
-| `POST /v1/organizations/{org}/works/{id}/versions/init`           | Reuse the file already on chain (only metadata changes)      |
-| `POST /v1/organizations/{org}/works/{id}/versions/init-upload`    | Upload a new asset file                                      |
+| Endpoint                                          | When to use                                                  |
+| ------------------------------------------------- | ------------------------------------------------------------ |
+| `POST /v1/works/{ats_id}/versions/init`           | Reuse the file already on chain (only metadata changes)      |
+| `POST /v1/works/{ats_id}/versions/init-upload`    | Upload a new asset file                                      |
 
-The rest of the flow (`/prepare` → `/confirm`) is identical to registration in spirit.
+The work is identified by its numeric `ats_id` (returned at registration). The rest of the flow (`/prepare` → `/confirm`) is identical to registration in spirit.
 
-## `POST /v1/organizations/{org}/works/{id}/versions/init` (reuse file)
+<Aside type="note">
+If the work was originally tagged with an `external_user_ref`, you **must** send the same value on every version-update body — the platform refuses updates whose ref does not match the stored one. See [External User References](/ats/api/guides/external-user-ref/).
+</Aside>
+
+## `POST /v1/works/{ats_id}/versions/init` (reuse file)
 
 **Scope:** `works:update`
 
@@ -25,7 +29,8 @@ The rest of the flow (`/prepare` → `/confirm`) is identical to registration in
 ```json
 {
   "network": "testnet",
-  "creators": [ /* same shape as registration */ ]
+  "creators": [ /* same shape as registration */ ],
+  "external_user_ref": "user_42"   // optional — required if the work was tagged at register time
 }
 ```
 
@@ -37,7 +42,7 @@ The rest of the flow (`/prepare` → `/confirm`) is identical to registration in
 
 No upload URL is returned — the existing file is reused.
 
-## `POST /v1/organizations/{org}/works/{id}/versions/init-upload` (new file)
+## `POST /v1/works/{ats_id}/versions/init-upload` (new file)
 
 **Scope:** `works:update`
 
@@ -47,7 +52,8 @@ No upload URL is returned — the existing file is reused.
 {
   "network": "testnet",
   "filename": "track-v2.wav",
-  "creators": [ /* ... */ ]
+  "creators": [ /* ... */ ],
+  "external_user_ref": "user_42"   // optional — required if the work was tagged at register time
 }
 ```
 
@@ -63,7 +69,7 @@ No upload URL is returned — the existing file is reused.
 
 Then `PUT` the new audio to `upload_url`.
 
-## `POST /v1/organizations/{org}/works/{id}/versions/prepare`
+## `POST /v1/works/{ats_id}/versions/prepare`
 
 **Scope:** `works:update`
 
@@ -83,12 +89,12 @@ Same shape as registration prepare — body is `{ "job_id": "..." }`. Returns si
 }
 ```
 
-## `POST /v1/organizations/{org}/works/{id}/versions/confirm`
+## `POST /v1/works/{ats_id}/versions/confirm`
 
 **Scope:** `works:update`
 
 Identical to registration confirm. Triggers a `work_updated` (or `work_failed`) webhook on completion.
 
 <Aside type="caution">
-The work must be **owned by your organization's wallet**. Trying to update a work owned by a different organization (or by a direct user) returns `403 work.access_forbidden`.
+The work must be **owned by your organization's wallet**. Trying to update a work owned by a different organization (or by a direct user) returns `403 work.access_forbidden`. If the work carries an `external_user_ref` that does not match the value in your request body, the platform also returns `403`.
 </Aside>

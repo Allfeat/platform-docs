@@ -1,19 +1,231 @@
 ---
 title: External User References
-description: Use external_user_ref to correlate Allfeat webhook callbacks back to your own user records — opaque, echoed unchanged, never on chain.
+description: Tag every work with one of your own user identifiers — list, update, and download a single end-user's portfolio without ever exposing access codes to them.
 ---
 
-You can pass an arbitrary opaque string (≤ 255 bytes) on `init` / `init-upload` to link the registration to your own user record:
+import { Aside, Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
 
-```jsonc
-{ ..., "external_user_ref": "user-42" }
+The B2B API serves many of your end-users from a single key. To keep their portfolios separate — for dashboards, downloads, webhook callbacks, and per-user update authorization — every write accepts an **opaque end-user reference**, and every read can be filtered by it.
+
+The reference is just a string you control (your internal user UUID, an artist ID, anything). The platform stores it on the work, echoes it back on webhooks, and uses it to scope listings and version-update authorization. It never appears on chain and never reaches our dashboards as a user-facing label.
+
+## When to use it
+
+Most B2B integrations have **many end-users behind a single key** (a label's roster, a distributor's catalog, an agency's signed artists). Without a ref, the API gives you flat org-wide access: every read sees every work, version updates can target anyone's work. That's fine for one-off migrations, but for real product flows you almost always want per-user scoping.
+
+Set `external_user_ref` on every write that originates from a specific user action — registrations, version updates, B2B-driven downloads — and the API does the bookkeeping for you.
+
+## Setup at a glance
+
+```
+WRITES   POST /v1/works/init                  body.external_user_ref = "user_42"
+         POST /v1/works/{id}/versions/init    body.external_user_ref = "user_42"
+         POST /v1/works/{id}/versions/init-upload  body.external_user_ref = "user_42"
+
+READS    GET  /v1/works?external_user_ref=user_42&network=testnet
+         GET  /v1/works/{ats_id}              → caller scope is org-wide on B2B
+         GET  /v1/works/{work_uuid}/download/asset
+         GET  /v1/works/{work_uuid}/download/certificate
+         GET  /v1/works/{work_uuid}/versions/{v}/download/audio
+         GET  /v1/works/{work_uuid}/versions/{v}/download/certificate
+
+WEBHOOK  Every payload echoes `external_user_ref` (or `null` if unset) and
+         omits `access_code` when the ref is set on the originating work.
 ```
 
-It is:
+## Setting the ref on writes
 
-- **Echoed back** unchanged in webhook payloads (`external_user_ref` field).
-- **Stored** in the transaction record so support can correlate by it.
-- **Opaque to us** — no validation beyond the length cap. We never display it in dashboards or treat it as PII; pick something that makes sense to your system (e.g. your internal user ID, an order ID, etc.).
-- **Not propagated on chain** — it lives only in the platform DB.
+Pass `external_user_ref` as a top-level field on the `init` body of any flow:
 
-If you need to look up by it later, **persist the `transaction_id` → `external_user_ref` mapping yourself** when you see the confirm response; there is no inverse-lookup endpoint by design.
+<Tabs>
+  <TabItem label="Register">
+    ```bash
+    curl -sS -X POST "$AF_API/v1/works/init" \
+      -H "Authorization: Bearer $AF_TOKEN" \
+      -H 'Content-Type: application/json' \
+      -d '{
+        "network": "testnet",
+        "title": "My first track",
+        "filename": "track.wav",
+        "creators": [{
+          "full_name": "Alice Composer",
+          "email": "alice@example.com",
+          "roles": { "author": true, "composer": true, "arranger": false, "adapter": false }
+        }],
+        "external_user_ref": "user_42"
+      }'
+    ```
+  </TabItem>
+  <TabItem label="Update — reuse file">
+    ```bash
+    curl -sS -X POST "$AF_API/v1/works/1024/versions/init" \
+      -H "Authorization: Bearer $AF_TOKEN" \
+      -H 'Content-Type: application/json' \
+      -d '{
+        "network": "testnet",
+        "creators": [...],
+        "external_user_ref": "user_42"
+      }'
+    ```
+  </TabItem>
+  <TabItem label="Update — new file">
+    ```bash
+    curl -sS -X POST "$AF_API/v1/works/1024/versions/init-upload" \
+      -H "Authorization: Bearer $AF_TOKEN" \
+      -H 'Content-Type: application/json' \
+      -d '{
+        "network": "testnet",
+        "creators": [...],
+        "filename": "track-v2.wav",
+        "external_user_ref": "user_42"
+      }'
+    ```
+  </TabItem>
+</Tabs>
+
+The value is validated server-side:
+
+- **Non-empty**, ≤ 255 bytes.
+- **Opaque** — no further validation. The platform stores it verbatim.
+- **Immutable** — once set on a work, it stays. There is no endpoint to update it.
+
+## Per-user update authorization
+
+When a version-update write carries `external_user_ref`, the API cross-checks it against the stored ref on the targeted work. Mismatches return:
+
+```json
+{ "error": { "code": "common.forbidden", "request_id": "…" } }
+```
+
+with a `403`. This is the rule that stops "user A's request mutated user B's work in the same org" by accident.
+
+If you omit `external_user_ref` on an update, the request is **org-wide** — any work in the org is reachable. That's only safe for back-office tools, never for end-user-initiated flows.
+
+## Filtering reads
+
+`GET /v1/works` accepts `?external_user_ref=<ref>` as an optional query string. With it, the listing is narrowed to that one end-user; without it, you see every work in the org.
+
+```bash
+curl -sS "$AF_API/v1/works?network=testnet&first=20&external_user_ref=user_42" \
+  -H "Authorization: Bearer $AF_TOKEN"
+```
+
+Response (truncated):
+
+```jsonc
+{
+  "works": [
+    {
+      "id": "<uuid>",            // path param for the download routes
+      "ats_id": 1024,
+      "owner": "<ss58>",
+      "latest_version": 2,
+      "latest_commitment": "0x...",
+      "created_at": "2026-05-01T08:12:00Z",
+      "latest_version_at": "2026-05-15T14:33:00Z",
+      "title": "My Track",
+      "asset_filename": "track.wav",
+      "has_files": true
+    }
+  ],
+  "page_info": { "has_next_page": false, "has_previous_page": false, "start_cursor": "…", "end_cursor": "…" },
+  "total_count": 1
+}
+```
+
+Cursor pagination: pass the previous response's `page_info.end_cursor` back as `?after=<cursor>` on the next call.
+
+`GET /v1/works/{ats_id}` (detail), `GET /v1/works/{ats_id}/versions`, and `GET /v1/works/{ats_id}/creators` ignore the query param — they return on-chain data that is org-scoped only. To list a user's portfolio, use `GET /v1/works?...`; to drill into a single work's history, use the per-work endpoints with the `ats_id` you got from that listing.
+
+## Downloads
+
+The four download routes resolve a presigned S3 URL by the **work's UUID** (the `id` field from the listing, not its numeric `ats_id`):
+
+```bash
+GET /v1/works/{work_uuid}/download/asset                     # latest version audio
+GET /v1/works/{work_uuid}/download/certificate               # latest version certificate
+GET /v1/works/{work_uuid}/versions/{v}/download/audio        # any version audio
+GET /v1/works/{work_uuid}/versions/{v}/download/certificate  # any version certificate
+```
+
+A B2B key sees every work under its organization on these routes, with or without the ref — the org scope is implicit in the key. Use the ref-filtered listing to discover the right `work_uuid` for the user you're serving.
+
+## Webhook payload
+
+Every webhook delivery echoes `external_user_ref` so your downstream handler can route by it:
+
+```jsonc
+{
+  "event":            "work_registered",
+  "transaction_id":   "<uuid>",
+  "organization_id":  "<uuid>",
+  "api_key_id":       "<uuid>",
+  "external_user_ref":"user_42",            // exactly what you sent
+  "network":          "testnet",
+  "ats_id":           1024,
+  "tx_hash":          "0xabc…",
+  "block_number":     1234567,
+  "block_hash":       "0xdef…",
+  "access_code":      null,                 // always null when ref is set
+  "explorer_url":     "https://explorer.allfeat.org/tx/0xabc…",
+  "finalized_at":     "2026-04-30T11:00:42Z"
+}
+```
+
+<Aside type="note">
+**No access code** is generated when the work is tagged with a ref. The end-user doesn't need one — your backend already knows who owns the work via the ref echoed on the webhook.
+</Aside>
+
+If you omitted `external_user_ref` on the originating `init`, the payload still includes the field (as `null`) and an `access_code` is generated and returned in its place.
+
+## Reconciling on your side
+
+We never expose an inverse-lookup endpoint (`give me every work for ref X` apart from the listing above is intentionally absent). Your dashboards typically want a local mapping:
+
+```
+your_works
+┌──────────────────────┬────────┬────────┬────────────────────┬────────────┐
+│ transaction_id (PK)  │ ats_id │ user_id │ tx_hash            │ created_at │
+├──────────────────────┼────────┼────────┼────────────────────┼────────────┤
+│ 8a3f…                │ 1024   │ user_42 │ 0xabc…             │ 2026-05-01 │
+│ 9b4e…                │ 1037   │ user_42 │ 0xdef…             │ 2026-05-15 │
+│ 1c5d…                │ 2048   │ user_43 │ 0xfff…             │ 2026-05-20 │
+└──────────────────────┴────────┴────────┴────────────────────┴────────────┘
+```
+
+Populate it from the webhook (idempotent on `transaction_id`). The Allfeat API gives you every field you need: `ats_id`, `tx_hash`, `external_user_ref`. The `user_id` column here is just your renamed copy of the ref.
+
+## Best practices
+
+| ✅ Do                                                                         | ❌ Don't                                                                  |
+|------------------------------------------------------------------------------|--------------------------------------------------------------------------|
+| Use a stable, unique-within-the-org identifier (UUID, primary key, …)         | Re-issue refs when a user renames or signs back in                       |
+| Send the ref on **every** end-user-initiated write                            | Mix ref-tagged and ref-less writes for the same end-user                  |
+| Use the same ref on update writes that you used on the originating register   | Try to "change" the ref on an existing work — it's immutable             |
+| Keep the ref opaque (internal IDs)                                            | Put PII in it (email, real name, …)                                       |
+| Verify your end-user owns the targeted work *before* calling `versions/init`   | Skip the check and rely solely on the platform's ref equality guard       |
+
+## Common errors
+
+| Code                                  | Cause                                                                                                  |
+|---------------------------------------|--------------------------------------------------------------------------------------------------------|
+| `common.forbidden`                    | Update target's `external_user_ref` does not match the value sent in the request body                  |
+| `common.not_found`                    | Listing returned no works for this ref (the user has none, or the wrong ref was used historically)     |
+| `session.invalid_external_user_ref`   | Returned by `POST /v1/sessions` (organizations service) when the value is empty or exceeds 255 bytes   |
+
+## See also
+
+<CardGrid>
+  <Card title="Tracking your own end-users (Widget)" icon="seti:html">
+    The widget-side companion of this guide — same primitive, exposed as a JWT claim plus an HTML attribute.
+    [Read →](/ats/widget/guides/your-own-users/)
+  </Card>
+  <Card title="Webhooks" icon="email">
+    Payload reference and signature verification recipes.
+    [Read →](/ats/api/guides/webhooks/)
+  </Card>
+  <Card title="Registering a work" icon="add-document">
+    The full init / upload / prepare / confirm reference.
+    [Read →](/ats/api/guides/registering/)
+  </Card>
+</CardGrid>
