@@ -18,9 +18,9 @@ You can integrate ATS into your platform in two ways. Pick the one that matches 
 | **Credential**            | `site_key` (public) + `secret_key` (server-side, mints JWTs)  | `afo_sk_live_…` bearer token (server-side only)                        |
 | **Session model**         | Short-lived JWT (~5 min, one-time-use) issued per user action | Long-lived bearer token bound to the organization                      |
 | **Audio handling**        | The widget uploads via a presigned S3 URL directly from the browser | Your backend gets a presigned S3 URL and uploads server-side     |
-| **End-user identity**     | Abstracted; user holds the access code                        | Abstracted; you correlate via opaque `external_user_ref`               |
+| **End-user identity**     | Abstracted; user holds the access code, **or** ref-scoped via your own `external_user_ref` | Abstracted; you correlate via opaque `external_user_ref`               |
 | **Webhooks**              | Not exposed (use the `allfeat:complete` Custom Event)         | Yes — signed `work_registered` / `work_updated` / `work_failed` POSTs  |
-| **Update flow**           | User enters access code in the widget UI                      | Your backend calls `/v1/organizations/{org}/works/{id}/versions/...`   |
+| **Update flow**           | User enters access code, **or** picks from a ref-scoped work-selector | Your backend calls `/v1/works/{ats_id}/versions/...`, including `external_user_ref` in the body when the work was tagged at register time (otherwise omit) |
 | **Best for**              | Web platforms wanting a drop-in registration UI               | B2B partners with their own UI, batch flows, or non-web clients        |
 
 ### Choose the Widget if…
